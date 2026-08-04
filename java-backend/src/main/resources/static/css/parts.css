@@ -244,6 +244,53 @@ html, body {
     text-align: right;
 }
 
+/* One number and its label. Exactly one tile per screen may put its value in
+   the accent — the single number that matters. */
+.stat-tile {
+    background: var(--surface-raised);
+    border-radius: var(--r-md);
+    padding: var(--s4);
+    min-width: 0;
+}
+
+.stat-tile__label {
+    font-size: var(--label-size);
+    font-weight: var(--label-weight);
+    line-height: var(--label-line);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stat-tile__value {
+    margin-top: var(--s2);
+    font-family: var(--font-mono);
+    font-size: var(--display-size);
+    font-weight: var(--mono-data-weight);
+    line-height: var(--display-line);
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.stat-tile__value--accent { color: var(--accent); }
+
+/* A tile with nothing to report yet says so, at a size that does not shout. */
+.stat-tile__value--quiet {
+    font-family: var(--font-sans);
+    font-size: var(--body-size);
+    line-height: var(--body-line);
+    color: var(--text-muted);
+}
+
+.stat-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: var(--s4);
+    margin-top: var(--s4);
+}
+
 .list-row {
     display: flex;
     align-items: center;
@@ -259,6 +306,19 @@ html, body {
 .list-row__text {
     flex: 1;
     min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Trailing metadata on a list row: fixed at its content width, and the last
+   thing to be truncated when the row runs out of space. */
+.list-row__hint {
+    flex: none;
+    max-width: 45%;
+    color: var(--text-muted);
+    font-size: var(--caption-size);
+    line-height: var(--caption-line);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

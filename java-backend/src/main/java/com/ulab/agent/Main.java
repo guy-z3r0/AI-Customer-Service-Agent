@@ -3,6 +3,7 @@ package com.ulab.agent;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.ulab.agent.services.LegacyImportService;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -41,6 +42,16 @@ public class Main {
      */
     @Bean
     public ApplicationRunner legacyImportOnStartup(LegacyImportService importer) {
-        return args -> importer.importAll();
+        return args -> {
+            try {
+                importer.importAll();
+            } catch (RuntimeException e) {
+                // Old files that will not read are a nuisance, not a reason to
+                // refuse to start. The panel works either way, and the import
+                // can be run again from the Businesses page.
+                LoggerFactory.getLogger(Main.class)
+                        .warn("Legacy import did not finish: {}", e.toString());
+            }
+        };
     }
 }

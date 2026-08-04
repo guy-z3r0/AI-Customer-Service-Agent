@@ -31,3 +31,4 @@ java-backend/data/config.json
 .env
 secrets/*
 !secrets/*.PLACEHOLDER
+java-backend/.embedded-postgres

@@ -20,7 +20,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -54,14 +56,22 @@ public class LegacyImportService {
     @Value("${PII_ENC_KEY:PLACEHOLDER_PII_ENC_KEY}")
     private String piiEncryptionKey;
 
+    private final TransactionTemplate perBusiness;
+
     public LegacyImportService(BusinessRepository businesses, AiSettingsRepository aiSettings,
-                               KbEntryRepository kbEntries) {
+                               KbEntryRepository kbEntries, PlatformTransactionManager transactions) {
         this.businesses = businesses;
         this.aiSettings = aiSettings;
         this.kbEntries = kbEntries;
+
+        // Each folder gets its own transaction. Postgres abandons a whole
+        // transaction the moment one statement fails, so sharing one across
+        // every folder meant a single bad file took the rest down with it —
+        // and then the outer commit failed too, which stopped the app booting.
+        this.perBusiness = new TransactionTemplate(transactions);
+        this.perBusiness.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    @Transactional
     public ImportResultView importAll() {
         List<String> imported = new ArrayList<>();
         List<String> skipped = new ArrayList<>();
@@ -75,7 +85,7 @@ public class LegacyImportService {
 
         for (File folder : folders) {
             try {
-                importOne(folder.toPath(), imported, skipped);
+                perBusiness.executeWithoutResult(status -> importOne(folder.toPath(), imported, skipped));
             } catch (RuntimeException e) {
                 log.warn("Could not import legacy business '{}': {}", folder.getName(), e.toString());
                 problems.add(folder.getName() + " — " + e.getMessage());

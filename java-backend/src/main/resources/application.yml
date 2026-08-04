@@ -38,6 +38,14 @@ spring:
   jackson:
     default-property-inclusion: non_null
 
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          # The panel is one operator on localhost, so caching buys nothing and
+          # costs the classic confusion of a fixed page still showing the bug.
+          no-cache: true
+
 voice:
   # Two addresses for the same server, because two different clients reach it.
   # This one is used by the backend itself, container to container.

@@ -188,7 +188,7 @@ public final class Lang {
         addClientStrings(m);
 
         // pages that arrive in later phases
-        m.put("soon.dashboard", pair("The dashboard arrives in Phase 6", "ড্যাশবোর্ড ফেজ ৬-এ আসছে"));
+        addDashboardStrings(m);
         m.put("soon.history", pair("Call history arrives in Phase 6", "কল ইতিহাস ফেজ ৬-এ আসছে"));
         m.put("soon.action", pair("Go to Businesses", "ব্যবসায় যান"));
 
@@ -393,6 +393,58 @@ public final class Lang {
     }
 
     /** One readable label per settings key, so the panel never shows raw key names. */
+    /**
+     * The Dashboard: what the system holds, what it can do right now, and what
+     * it has been doing. The capability lines are deliberately blunt about what
+     * is switched off — a demo should never be the place someone finds out.
+     */
+    private static void addDashboardStrings(Map<String, String[]> m) {
+        m.put("dash.title", pair("Overview", "সারসংক্ষেপ"));
+        m.put("dash.note", pair(
+                "Everything the agent knows, and everything it can do right now.",
+                "এজেন্ট যা কিছু জানে, এবং এই মুহূর্তে যা কিছু করতে পারে।"));
+
+        m.put("dash.businesses", pair("Businesses", "ব্যবসা"));
+        m.put("dash.knowledge", pair("Knowledge entries", "জ্ঞানের এন্ট্রি"));
+        m.put("dash.customers", pair("Customers", "গ্রাহক"));
+        m.put("dash.calls_total", pair("Calls", "কল"));
+        m.put("dash.calls_today", pair("Calls today", "আজকের কল"));
+        m.put("dash.median_reply", pair("Median reply", "গড় উত্তর"));
+        m.put("dash.no_calls_yet", pair("no calls yet", "এখনও কোনো কল হয়নি"));
+
+        m.put("dash.capabilities", pair("What works right now", "এখন যা কাজ করছে"));
+        m.put("dash.state_ready", pair("Ready", "প্রস্তুত"));
+        m.put("dash.state_degraded", pair("Free fallback", "বিনামূল্যের বিকল্প"));
+        m.put("dash.state_off", pair("Needs a key", "একটি কী দরকার"));
+
+        m.put("dash.cap.database", pair("Database and knowledge base", "ডেটাবেস ও জ্ঞানভাণ্ডার"));
+        m.put("dash.cap.voice", pair("Voice server", "ভয়েস সার্ভার"));
+        m.put("dash.cap.model", pair("Conversation", "কথোপকথন"));
+        m.put("dash.cap.speech", pair("Speech recognition and voice", "স্পিচ রিকগনিশন ও কণ্ঠ"));
+        m.put("dash.cap.telephony", pair("Phone calls (Twilio)", "ফোন কল (টুইলিও)"));
+        m.put("dash.cap.email", pair("Escalation email", "এসকেলেশন ইমেইল"));
+
+        m.put("dash.hint.model", pair(
+                "Paste a key in Settings and the agent starts answering.",
+                "সেটিংসে একটি কী দিন, এজেন্ট উত্তর দেওয়া শুরু করবে।"));
+        m.put("dash.hint.speech", pair(
+                "Working without a Google account. Add credentials for better speech.",
+                "গুগল অ্যাকাউন্ট ছাড়াই চলছে। ভালো স্পিচের জন্য ক্রেডেনশিয়াল দিন।"));
+        m.put("dash.hint.optional", pair("Optional. Not needed for a call.",
+                "ঐচ্ছিক। কলের জন্য দরকার নেই।"));
+
+        m.put("dash.recent", pair("Recent calls", "সাম্প্রতিক কল"));
+        m.put("dash.col_started", pair("Started", "শুরু"));
+        m.put("dash.col_business", pair("Business", "ব্যবসা"));
+        m.put("dash.col_mode", pair("Outcome", "ফলাফল"));
+        m.put("dash.col_turns", pair("Turns", "পালা"));
+        m.put("dash.col_length", pair("Length", "দৈর্ঘ্য"));
+        m.put("dash.empty", pair("No calls yet — place one from the Live call page",
+                "এখনও কোনো কল হয়নি — লাইভ কল পেজ থেকে একটি করুন"));
+        m.put("dash.start_call", pair("Place a call", "একটি কল করুন"));
+        m.put("dash.in_progress", pair("in progress", "চলছে"));
+    }
+
     private static void addSettingLabels(Map<String, String[]> m) {
         m.put("key.llm_provider", pair("Provider", "প্রোভাইডার"));
         m.put("key.llm_model", pair("Model", "মডেল"));

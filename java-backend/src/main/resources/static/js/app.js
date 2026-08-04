@@ -11,6 +11,7 @@ import { api } from './api.js';
 import { element, emptyState, toast, toastError } from './components.js';
 import { connectLiveFeed } from './ws.js';
 import { renderBusinesses } from './pages/businesses.js';
+import { renderDashboard } from './pages/dashboard.js';
 import { renderBusinessEditor } from './pages/business_editor.js';
 import { renderClients } from './pages/clients.js';
 import { renderLiveCall } from './pages/live_call.js';
@@ -19,7 +20,7 @@ import { renderSettings } from './pages/settings.js';
 const HEALTH_POLL_MS = 10000;
 
 const ROUTES = [
-    { id: 'dashboard', icon: '▦', render: soonPage('soon.dashboard') },
+    { id: 'dashboard', icon: '▦', render: renderDashboard },
     { id: 'live_call', icon: '◉', render: renderLiveCall },
     { id: 'businesses', icon: '▤', render: renderBusinesses },
     { id: 'clients', icon: '◍', render: renderClients },
@@ -30,7 +31,9 @@ const ROUTES = [
     { id: 'business_editor', hidden: true, render: renderBusinessEditor }
 ];
 
-const DEFAULT_ROUTE = 'businesses';
+// The overview is the landing page: it answers "is this thing working" before
+// anyone has to click anything.
+const DEFAULT_ROUTE = 'dashboard';
 
 const shell = {
     strings: {},
