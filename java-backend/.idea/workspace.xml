@@ -5,18 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="5dc0b925-1abb-4bd5-8255-8a97fcd96b03" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/../.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/../.gitignore" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../python-scripts/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/../python-scripts/.idea/inspectionProfiles/profiles_settings.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/../python-scripts/.idea/misc.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/../python-scripts/.idea/modules.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/../python-scripts/.idea/python-scripts.iml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/../python-scripts/.idea/vcs.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/../python-scripts/ai_agent.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/../python-scripts/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/../python-voice/config.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../python-scripts/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/../python-voice/requirements.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../python-scripts/stt_sender.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/../python-scripts/tts_speaker.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../python-voice/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/../python-voice/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../run-local.ps1" beforeDir="false" afterPath="$PROJECT_DIR$/../run-local.ps1" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -47,8 +37,8 @@
 }</component>
   <component name="GithubPullRequestsUISettings"><![CDATA[{
   "selectedUrlAndAccountId": {
-    "url": "https://github.com/Raeden-Dev/AI-Customer-Service-Agent.git",
-    "accountId": "c5f39ba4-4799-425d-aa5c-69b1b24299ab"
+    "url": "https://github.com/guy-z3r0/AI-Customer-Service-Agent.git",
+    "accountId": "5bc18f0a-8222-4f1c-b962-b86d2707e710"
   }
 }]]></component>
   <component name="MavenImportPreferences">
@@ -76,22 +66,23 @@
   <component name="ProjectViewState">
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Application.Main.executor&quot;: &quot;Run&quot;,
-    &quot;Maven.java-backend [clean].executor&quot;: &quot;Run&quot;,
-    &quot;Maven.java-backend [compile].executor&quot;: &quot;Run&quot;,
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
-    &quot;copilot.chat.legacySessionMetadata.migrated&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;last_opened_file_path&quot;: &quot;F:/3.GitHub_ORS/AI-Customer-Service-Agent/java-backend&quot;,
-    &quot;onboarding.tips.debug.path&quot;: &quot;F:/3.GitHub_ORS/AI-Customer-Service-Agent/java-backend/src/main/java/com/ulab/agent/Main.java&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;copyright&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Application.Main.executor": "Run",
+    "Maven.java-backend [clean].executor": "Run",
+    "Maven.java-backend [compile].executor": "Run",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "copilot.chat.legacySessionMetadata.migrated": "true",
+    "git-widget-placeholder": "main",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "D:/GitHub/AI-Customer-Service-Agent/java-backend",
+    "onboarding.tips.debug.path": "F:/3.GitHub_ORS/AI-Customer-Service-Agent/java-backend/src/main/java/com/ulab/agent/Main.java",
+    "settings.editor.selected.configurable": "copyright"
   }
-}</component>
+}]]></component>
   <component name="RunManager">
     <configuration name="Main" type="Application" factoryName="Application" temporary="true" nameIsGenerated="true">
       <option name="MAIN_CLASS_NAME" value="com.ulab.agent.Main" />

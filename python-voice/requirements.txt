@@ -9,7 +9,10 @@ google-cloud-speech==2.28.0
 google-cloud-texttospeech==2.21.1
 
 # Voice activity detection: decides when the caller has stopped talking.
-webrtcvad==2.0.10
+# Same C library either way; the -wheels fork is the one that ships a prebuilt
+# Windows binary, so a laptop without Visual C++ build tools can still install it.
+webrtcvad==2.0.10; platform_system != "Windows"
+webrtcvad-wheels==2.0.14; platform_system == "Windows"
 
 # Resampling 48 kHz browser audio down to the 16 kHz the recognisers want.
 numpy==1.26.4

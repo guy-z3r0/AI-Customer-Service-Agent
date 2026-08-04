@@ -35,26 +35,46 @@ if (-not $python) {
     exit 1
 }
 Write-Host "Python: $($python.Source)"
+
+# The voice server is plain Python with no virtualenv, so its packages are
+# either already on this machine or they are not. Missing uvicorn is the
+# symptom that matters: without it the voice window dies before it prints.
+& $python.Source -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('uvicorn') else 1)"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Installing the voice server's Python packages (first run only)..." -ForegroundColor Cyan
+    & $python.Source -m pip install -q -r (Join-Path $root "python-voice\requirements.txt")
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Those packages would not install. Fix the error above and re-run." -ForegroundColor Red
+        exit 1
+    }
+}
 Write-Host ""
 
 # --- The backend, with its own embedded database -----------------------------
+# "clean" because Maven leaves the class files of deleted sources behind, and
+# Spring scans whatever is in target/: one orphan from an earlier layout is
+# enough to fail the boot with a NoSuchFieldError that points at nothing.
+# The windows are /k, not /c, so a crash stays on screen to be read.
 Write-Host "Starting the backend and its database..." -ForegroundColor Cyan
 $backend = Start-Process -PassThru -FilePath "cmd.exe" -ArgumentList @(
-    "/c", "title AI Agent - backend && set JAVA_HOME=$jdk && mvn spring-boot:run -Dspring-boot.run.profiles=dev"
+    "/k", "title AI Agent - backend && set JAVA_HOME=$jdk && mvn clean spring-boot:run -Dspring-boot.run.profiles=dev"
 ) -WorkingDirectory (Join-Path $root "java-backend")
 
 # --- The voice server --------------------------------------------------------
 Write-Host "Starting the voice server..." -ForegroundColor Cyan
 $voice = Start-Process -PassThru -FilePath "cmd.exe" -ArgumentList @(
-    "/c", "title AI Agent - voice && set JAVA_BASE_URL=http://127.0.0.1:8080 && python -m uvicorn server:app --host 127.0.0.1 --port 8090"
+    "/k", "title AI Agent - voice && set JAVA_BASE_URL=http://127.0.0.1:8080 && python -m uvicorn server:app --host 127.0.0.1 --port 8090"
 ) -WorkingDirectory (Join-Path $root "python-voice")
 
 # --- Wait for the panel, then open it ----------------------------------------
 Write-Host ""
-Write-Host "Waiting for the panel (the first run downloads PostgreSQL, so give it a minute)..."
+# Eight minutes, because a first run downloads the whole Maven dependency tree
+# and then PostgreSQL. A warm machine gets here in well under one.
+Write-Host "Waiting for the panel (the first run downloads Maven dependencies and"
+Write-Host "PostgreSQL, which can take several minutes)..."
 $panel = "http://127.0.0.1:8080"
 $ready = $false
-foreach ($attempt in 1..90) {
+foreach ($attempt in 1..240) {
     Start-Sleep -Seconds 2
     try {
         $response = Invoke-WebRequest -Uri "$panel/api/health" -TimeoutSec 3 -UseBasicParsing
