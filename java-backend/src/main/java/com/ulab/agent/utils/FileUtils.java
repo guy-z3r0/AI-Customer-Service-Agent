@@ -17,10 +17,15 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import static com.ulab.agent.Main.GSON;
-import static com.ulab.agent.Main.console;
 
 public class FileUtils {
+
+    private static final Logger log = LoggerFactory.getLogger(FileUtils.class);
+
     private static final Path ERROR_LOG_DIRECTORY = Paths.get("logs", "errors");
     private static final String ERROR_LOG_FILE_NAME = "error_{at}_{id}.log";
 
@@ -31,9 +36,9 @@ public class FileUtils {
         String tag = " [" + directoryPath.getFileName() + "]";
         try {
             Files.createDirectories(directoryPath);
-            if (showInfo) console.info(Lang.DIR_CREATE_SUCCESS + tag);
+            if (showInfo) log.info(Lang.DIR_CREATE_SUCCESS + tag);
         } catch (IOException e) {
-            console.error(Lang.DIR_CREATE_FAIL + tag);
+            log.error(Lang.DIR_CREATE_FAIL + tag);
         }
     }
 
@@ -52,20 +57,20 @@ public class FileUtils {
 
     public static <T> T loadJsonFile(String fileName, Path filePath, Type typeOfT, boolean showInfo) {
         if (!Files.exists(filePath)) {
-            console.warn(Lang.FILE_NOT_FOUND + " [" + fileName + "] at " + filePath);
+            log.warn(Lang.FILE_NOT_FOUND + " [" + fileName + "] at " + filePath);
             return null;
         }
         try (BufferedReader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8)) {
             T myObj = GSON.fromJson(reader, typeOfT);
             if (myObj == null) {
-                console.error(Lang.FILE_READ_FAIL + " [" + fileName + "] at " + filePath);
+                log.error(Lang.FILE_READ_FAIL + " [" + fileName + "] at " + filePath);
                 return null;
             }
-            if (showInfo) console.info(String.format(Lang.FILE_LOADED, fileName));
+            if (showInfo) log.info(String.format(Lang.FILE_LOADED, fileName));
             return myObj;
         } catch (IOException | JsonSyntaxException e) {
             logError("loadJsonFile", e);
-            console.error(Lang.FILE_READ_FAIL + " [" + fileName + "] at " + filePath);
+            log.error(Lang.FILE_READ_FAIL + " [" + fileName + "] at " + filePath);
         }
         return null;
     }
@@ -81,20 +86,20 @@ public class FileUtils {
 
     public static JsonObject getJsonObject(String fileName, Path filePath, boolean showInfo) {
         if (!Files.exists(filePath)) {
-            console.warn(Lang.FILE_NOT_FOUND + " [" + fileName + "] at " + filePath);
+            log.warn(Lang.FILE_NOT_FOUND + " [" + fileName + "] at " + filePath);
             return null;
         }
         try (BufferedReader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8)) {
             JsonObject jsonObject = JsonParser.parseReader(reader).getAsJsonObject();
             if (jsonObject == null) {
-                console.error(Lang.FILE_READ_FAIL + " [" + fileName + "] at " + filePath);
+                log.error(Lang.FILE_READ_FAIL + " [" + fileName + "] at " + filePath);
                 return null;
             }
-            if (showInfo) console.info(String.format(Lang.FILE_LOADED, fileName));
+            if (showInfo) log.info(String.format(Lang.FILE_LOADED, fileName));
             return jsonObject;
         } catch (IOException | JsonSyntaxException e) {
             logError("getJsonObject", e);
-            console.error(Lang.FILE_READ_FAIL + " [" + fileName + "] at " + filePath);
+            log.error(Lang.FILE_READ_FAIL + " [" + fileName + "] at " + filePath);
         }
         return null;
     }
@@ -110,15 +115,15 @@ public class FileUtils {
 
     public static <T> void saveJsonFile(String fileName, Path savePath, T dataObject, boolean showInfo) {
         if (dataObject == null) {
-            console.error(Lang.FILE_WRITE_FAIL + " [" + fileName + "] at " + savePath);
+            log.error(Lang.FILE_WRITE_FAIL + " [" + fileName + "] at " + savePath);
             return;
         }
         try (BufferedWriter writer = Files.newBufferedWriter(savePath, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
             GSON.toJson(dataObject, writer);
-            if (showInfo) console.info(Lang.FILE_WRITE_SUCCESS + " [" + fileName + "]");
+            if (showInfo) log.info(Lang.FILE_WRITE_SUCCESS + " [" + fileName + "]");
         } catch (IOException e) {
             logError("saveJsonFile", e);
-            console.error(Lang.FILE_WRITE_FAIL + " [" + fileName + "] at " + savePath);
+            log.error(Lang.FILE_WRITE_FAIL + " [" + fileName + "] at " + savePath);
         }
     }
 
@@ -144,11 +149,11 @@ public class FileUtils {
             boolean changed = syncJsonObjects(existingJsonTree.getAsJsonObject(), defaultJsonTree.getAsJsonObject());
             if (changed) {
                 saveJsonFile(fileName, filePath, existingJsonTree, false);
-                if (showInfo) console.info(Lang.FILE_WRITE_SUCCESS + " [" + fileName + "]");
+                if (showInfo) log.info(Lang.FILE_WRITE_SUCCESS + " [" + fileName + "]");
             }
         } catch (Exception e) {
             logError("updateJsonFile", e);
-            console.error(Lang.FILE_WRITE_FAIL + " [" + fileName + "] at " + filePath);
+            log.error(Lang.FILE_WRITE_FAIL + " [" + fileName + "] at " + filePath);
         }
     }
 
@@ -219,9 +224,9 @@ public class FileUtils {
             e.printStackTrace(writer);
             writer.println("===============================");
 
-            console.warn("Saved error log to: " + logFile.toAbsolutePath());
+            log.warn("Saved error log to: " + logFile.toAbsolutePath());
         } catch (IOException writeEx) {
-            console.error("Failed to save error log.");
+            log.error("Failed to save error log.");
             writeEx.printStackTrace();
         }
     }

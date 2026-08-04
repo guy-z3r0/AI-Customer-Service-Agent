@@ -1,0 +1,52 @@
+server:
+  # Localhost by default so the panel is not exposed on the network. Docker sets
+  # SERVER_ADDRESS=0.0.0.0 because a container port must listen on all interfaces
+  # before compose can publish it back to 127.0.0.1 on the host.
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: ai-customer-service-agent
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/agent}
+    username: ${POSTGRES_USER:agent}
+    password: ${POSTGRES_PASSWORD:PLACEHOLDER_DB_PASSWORD}
+    hikari:
+      data-source-properties:
+        # Lets plain Java strings be sent to jsonb columns without an explicit cast.
+        stringtype: unspecified
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    placeholders:
+      # V2__seed.sql encrypts the sample clients' phone/email with this key.
+      pii_enc_key: ${PII_ENC_KEY:PLACEHOLDER_PII_ENC_KEY}
+
+  jpa:
+    # Flyway owns the schema. Hibernate must never touch it.
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  jackson:
+    default-property-inclusion: non_null
+
+voice:
+  # Two addresses for the same server, because two different clients reach it.
+  # This one is used by the backend itself, container to container.
+  internal-url: ${VOICE_INTERNAL_URL:http://localhost:8090}
+  # This one is handed to the browser, which is outside Docker's network.
+  public-ws-url: ${VOICE_PUBLIC_WS_URL:ws://localhost:8090}
+
+# The panel is plain static files; no template engine or dev tooling needed.
+logging:
+  level:
+    root: INFO
+    com.ulab.agent: INFO

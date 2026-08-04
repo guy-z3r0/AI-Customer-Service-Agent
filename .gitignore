@@ -14,6 +14,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+.pytest_cache/
 
 # --- OS ---
 .DS_Store
@@ -24,3 +25,9 @@ logs/
 *.class
 *.lst
 java-backend/data/config.json
+
+# --- Secrets & local environment ---
+# The committed *.PLACEHOLDER files show the shape; the real ones never land in git.
+.env
+secrets/*
+!secrets/*.PLACEHOLDER

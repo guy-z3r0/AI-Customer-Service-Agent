@@ -1,0 +1,279 @@
+/*
+ * The contract's input and feedback parts, split out of parts.css so neither
+ * file outgrows its line budget as later phases add screens. Same rule applies:
+ * values come only from nocturne.css.
+ */
+
+
+.button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s2);
+    height: var(--control-height);
+    padding: var(--s0) var(--s5);
+    border: none;
+    border-radius: var(--r-sm);
+    font-family: var(--font-sans);
+    font-size: var(--body-size);
+    font-weight: var(--body-strong-weight);
+    line-height: var(--body-line);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+
+.button--primary { background: var(--accent); color: var(--surface-backdrop); }
+.button--secondary {
+    background: var(--surface-raised);
+    color: var(--text-primary);
+    border: var(--hairline) solid var(--border-strong);
+}
+.button--ghost { background: transparent; color: var(--text-secondary); }
+.button--destructive { background: var(--data-rose); color: var(--surface-backdrop); }
+
+.button--secondary:hover { background: var(--raised-hover); }
+.button--secondary:active { background: var(--raised-pressed); }
+.button--ghost:hover { background: var(--panel-hover); }
+.button--ghost:active { background: var(--panel-pressed); }
+
+.button:disabled {
+    background: var(--surface-raised);
+    color: var(--text-disabled);
+    border: var(--hairline) solid var(--border-hairline);
+    cursor: default;
+}
+
+.text-field {
+    width: 100%;
+    height: var(--control-height);
+    padding: var(--s0) var(--s4);
+    border: var(--hairline) solid var(--border-strong);
+    border-radius: var(--r-sm);
+    background: var(--surface-raised);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: var(--body-size);
+    line-height: var(--body-line);
+}
+
+.text-field::placeholder { color: var(--text-muted); }
+.text-field--error { border-color: var(--data-rose); }
+.text-field:disabled { background: var(--surface-raised); color: var(--text-disabled); }
+
+/* Multi-line grows to a stated maximum and scrolls after it, per the contract. */
+.text-field--multiline {
+    height: auto;
+    min-height: calc(var(--control-height) * 2);
+    max-height: calc(var(--control-height) * 6);
+    padding: var(--s3) var(--s4);
+    resize: vertical;
+    overflow-y: auto;
+}
+
+.dropdown {
+    height: var(--control-height);
+    padding: var(--s0) var(--s3) var(--s0) var(--s4);
+    border: var(--hairline) solid var(--border-strong);
+    border-radius: var(--r-sm);
+    background: var(--surface-raised);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: var(--body-size);
+    max-width: 20rem;
+}
+
+.dropdown option { background: var(--surface-overlay); color: var(--text-primary); }
+
+/* --------------------------------------------------------------- feedback -- */
+
+.inline-error {
+    margin-top: var(--s2);
+    color: var(--data-rose);
+    font-size: var(--caption-size);
+    line-height: var(--caption-line);
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s6);
+    padding: var(--s8) var(--s5);
+    text-align: center;
+}
+
+.empty-state__line {
+    font-size: var(--subhead-size);
+    font-weight: var(--subhead-weight);
+    line-height: var(--subhead-line);
+    color: var(--text-secondary);
+}
+
+.toast-stack {
+    position: fixed;
+    right: var(--s5);
+    bottom: var(--s5);
+    display: flex;
+    flex-direction: column-reverse;
+    gap: var(--s3);
+    z-index: 20;
+}
+
+.toast {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--s3);
+    max-width: 24rem;
+    padding: var(--s4);
+    border-radius: var(--r-md);
+    background: var(--surface-overlay);
+    box-shadow: var(--shadow-overlay);
+    font-size: var(--body-size);
+    line-height: var(--body-line);
+    animation: toast-in var(--motion-fast) ease-out;
+}
+
+.toast__dot {
+    width: var(--s3);
+    height: var(--s3);
+    margin-top: var(--s2);
+    border-radius: var(--r-pill);
+    flex: none;
+}
+
+.toast__dot--good { background: var(--data-jade); }
+.toast__dot--bad { background: var(--data-rose); }
+.toast__dot--info { background: var(--data-azure); }
+.toast__dot--warn { background: var(--data-gold); }
+
+.toast__text {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+@keyframes toast-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.loading {
+    background: var(--surface-raised);
+    border-radius: var(--r-md);
+    min-height: var(--s9);
+}
+
+/* ----------------------------------------------------------------- dialog -- */
+
+.dialog__scrim {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--s6);
+    background: var(--scrim);
+    z-index: 20;
+    animation: toast-in var(--motion-medium) ease-out;
+}
+
+.dialog {
+    display: flex;
+    flex-direction: column;
+    width: min(34rem, 100%);
+    /* The contract caps a dialog at three quarters of the window height. */
+    max-height: 75vh;
+    padding: var(--s6);
+    border-radius: var(--r-lg);
+    background: var(--surface-overlay);
+    box-shadow: var(--shadow-overlay);
+}
+
+.dialog__title {
+    font-size: var(--title-size);
+    font-weight: var(--title-weight);
+    line-height: var(--title-line);
+    color: var(--text-primary);
+}
+
+/* Only the body scrolls; the title and the action row stay put. */
+.dialog__body {
+    flex: 1 1 auto;
+    margin-top: var(--s5);
+    overflow-y: auto;
+    color: var(--text-secondary);
+    font-size: var(--body-size);
+    line-height: var(--body-line);
+}
+
+.dialog__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--s3);
+    margin-top: var(--s6);
+    flex: none;
+}
+
+/* -------------------------------------------------------------- tab-strip -- */
+
+.tab-strip {
+    display: flex;
+    align-items: stretch;
+    height: var(--tab-strip-height);
+    overflow-x: auto;
+    border-bottom: var(--hairline) solid var(--border-hairline);
+}
+
+.tab {
+    flex: none;
+    padding: var(--s0) var(--s4);
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--font-sans);
+    font-size: var(--label-size);
+    font-weight: var(--label-weight);
+    line-height: var(--label-line);
+    white-space: nowrap;
+    cursor: default;
+}
+
+.tab:hover { color: var(--text-secondary); }
+
+.tab--selected {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent);
+}
+
+/* ------------------------------------------------------------ small helpers -- */
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    flex-wrap: wrap;
+}
+
+.row--end { justify-content: flex-end; }
+
+/* One labelled control and the room its error message needs. */
+.field + .field { margin-top: var(--s4); }
+
+.caption {
+    font-size: var(--caption-size);
+    line-height: var(--caption-line);
+}
+
+.muted-body { color: var(--text-secondary); }
+
+.mono {
+    font-family: var(--font-mono);
+    font-size: var(--mono-data-size);
+    font-weight: var(--mono-data-weight);
+    line-height: var(--mono-data-line);
+}

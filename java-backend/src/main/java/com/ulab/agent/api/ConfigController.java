@@ -1,36 +1,39 @@
 package com.ulab.agent.api;
 
-import com.ulab.agent.managers.ConfigManager;
-import com.ulab.agent.models.Config;
-import org.springframework.http.ResponseEntity;
+import com.ulab.agent.api.dto.ConfigEntryView;
+import com.ulab.agent.services.ConfigService;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+import java.util.Map;
+
 /**
- * GET/POST /api/config — the global settings.
- * Python calls GET at the start of every call to learn the STT + TTS settings.
+ * The global settings behind the panel's Settings page.
+ *
+ * GET never returns a real credential: secret values come back masked. PUT
+ * takes a plain key-to-value map; a secret left blank keeps what is stored.
  */
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/config")
 public class ConfigController {
 
-    private final ConfigManager configManager;
+    private final ConfigService config;
 
-    public ConfigController(ConfigManager configManager) {
-        this.configManager = configManager;
+    public ConfigController(ConfigService config) {
+        this.config = config;
     }
 
-    @GetMapping("/config")
-    public ResponseEntity<Config> getConfig() {
-        return ResponseEntity.ok(configManager.getConfig());
+    @GetMapping
+    public List<ConfigEntryView> list() {
+        return config.listForPanel();
     }
 
-    @PostMapping("/config")
-    public ResponseEntity<Config> updateConfig(@RequestBody Config config) {
-        configManager.updateConfig(config);
-        return ResponseEntity.ok(configManager.getConfig());
+    @PutMapping
+    public Map<String, Object> update(@RequestBody Map<String, String> values) {
+        return Map.of("changed", config.update(values));
     }
 }

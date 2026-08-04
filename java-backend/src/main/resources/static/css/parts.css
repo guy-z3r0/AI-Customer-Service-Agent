@@ -1,0 +1,323 @@
+/*
+ * The contract's parts, one class each. Values come only from nocturne.css —
+ * there is no hex colour and no loose pixel measurement anywhere below.
+ * Parts are added here when a screen first needs one, never invented locally.
+ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--surface-backdrop);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: var(--body-size);
+    font-weight: var(--body-weight);
+    line-height: var(--body-line);
+}
+
+:focus-visible {
+    outline: var(--focus-ring-width) solid var(--accent);
+    outline-offset: var(--focus-ring-gap);
+}
+
+/* ------------------------------------------------------------------ shell -- */
+
+.window-frame {
+    display: grid;
+    grid-template-columns: var(--rail-width) 1fr;
+    height: 100%;
+    min-width: var(--window-min-width);
+    min-height: var(--window-min-height);
+    background: var(--surface-backdrop);
+}
+
+.window-column {
+    display: grid;
+    grid-template-rows: var(--top-bar-height) 1fr var(--status-bar-height);
+    min-width: 0;
+}
+
+.side-rail {
+    background: var(--surface-panel);
+    box-shadow: var(--shadow-panel);
+    padding: var(--s4) var(--s0);
+    overflow-y: auto;
+    scrollbar-width: none;
+}
+
+.side-rail__brand {
+    padding: var(--s3) var(--s4) var(--s5) var(--s4);
+    font-size: var(--subhead-size);
+    font-weight: var(--subhead-weight);
+    line-height: var(--subhead-line);
+    color: var(--text-secondary);
+}
+
+.rail-item {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    height: var(--control-height);
+    padding: var(--s0) var(--s4);
+    border: none;
+    border-left: var(--focus-ring-width) solid transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    text-align: left;
+    width: 100%;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rail-item:hover { background: var(--panel-hover); }
+.rail-item:active { background: var(--panel-pressed); }
+
+.rail-item--selected {
+    background: var(--panel-selected);
+    border-left-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.rail-item__icon {
+    width: var(--icon-rail);
+    text-align: center;
+    flex: none;
+}
+
+.top-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    padding: var(--s0) var(--s5);
+    background: var(--surface-panel);
+    box-shadow: var(--shadow-panel);
+    position: relative;
+    z-index: 1;
+}
+
+.top-bar__title {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--heading-size);
+    font-weight: var(--heading-weight);
+    line-height: var(--heading-line);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.top-bar__label {
+    font-size: var(--label-size);
+    font-weight: var(--label-weight);
+    line-height: var(--label-line);
+    color: var(--text-muted);
+    flex: none;
+}
+
+.status-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--s5);
+    padding: var(--s0) var(--s3);
+    background: var(--surface-panel);
+    border-top: var(--hairline) solid var(--border-hairline);
+    font-size: var(--caption-size);
+    font-weight: var(--caption-weight);
+    line-height: var(--caption-line);
+    color: var(--text-muted);
+}
+
+.status-bar__left {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    gap: var(--s5);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.status-bar__right { flex: none; }
+
+.plugin-host {
+    background: var(--surface-backdrop);
+    padding: var(--s5);
+    overflow-y: auto;
+    min-width: 0;
+}
+
+/* --------------------------------------------------------------- surfaces -- */
+
+.panel {
+    background: var(--surface-panel);
+    border-radius: var(--r-md);
+    padding: var(--s5);
+    box-shadow: var(--shadow-panel);
+}
+
+.panel + .panel { margin-top: var(--s5); }
+
+.card {
+    background: var(--surface-raised);
+    border-radius: var(--r-md);
+    padding: var(--s4);
+}
+
+.section-header {
+    margin: var(--s6) var(--s0) var(--s4) var(--s0);
+    font-size: var(--subhead-size);
+    font-weight: var(--subhead-weight);
+    line-height: var(--subhead-line);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.section-header:first-child { margin-top: var(--s0); }
+
+.divider {
+    height: var(--hairline);
+    margin: var(--s4) var(--s0);
+    background: var(--border-hairline);
+    border: none;
+}
+
+.scroll-region { overflow-y: auto; }
+
+.scroll-region::-webkit-scrollbar,
+.plugin-host::-webkit-scrollbar { width: var(--s4); }
+
+.scroll-region::-webkit-scrollbar-track,
+.plugin-host::-webkit-scrollbar-track { background: transparent; }
+
+.scroll-region::-webkit-scrollbar-thumb,
+.plugin-host::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: var(--r-pill);
+}
+
+/* ------------------------------------------------------------------- data -- */
+
+.table-wrap { overflow-x: auto; }
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.table th {
+    height: var(--table-row-height);
+    padding: var(--s3);
+    background: var(--surface-raised);
+    color: var(--text-muted);
+    font-size: var(--label-size);
+    font-weight: var(--label-weight);
+    line-height: var(--label-line);
+    text-align: left;
+    position: sticky;
+    top: 0;
+}
+
+.table td {
+    height: var(--table-row-height);
+    padding: var(--s3);
+    border-top: var(--hairline) solid var(--border-hairline);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.table tbody tr:hover { background: var(--panel-hover); }
+
+.table .cell--number {
+    font-family: var(--font-mono);
+    font-size: var(--mono-data-size);
+    font-weight: var(--mono-data-weight);
+    line-height: var(--mono-data-line);
+    text-align: right;
+}
+
+.list-row {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    min-height: var(--list-row-height);
+    padding: var(--s4);
+    border-top: var(--hairline) solid var(--border-hairline);
+}
+
+.list-row:first-child { border-top: none; }
+.list-row:hover { background: var(--panel-hover); }
+
+.list-row__text {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* A live guess at what is being said. It is replaced the moment the real line
+   arrives, so it reads as provisional rather than as transcript. */
+.list-row--partial .list-row__text { color: var(--text-muted); }
+
+/* The transcript is the one region on this screen that scrolls. */
+.transcript {
+    max-height: 24rem;
+    margin-top: var(--s4);
+}
+
+.key-value {
+    display: grid;
+    grid-template-columns: minmax(0, 18rem) minmax(0, 1fr);
+    column-gap: var(--s5);
+    row-gap: var(--s3);
+    align-items: start;
+}
+
+.key-value__label {
+    font-size: var(--label-size);
+    font-weight: var(--label-weight);
+    line-height: var(--label-line);
+    color: var(--text-muted);
+    white-space: nowrap;
+    padding-top: var(--s3);
+}
+
+.key-value__value { min-width: 0; }
+
+.tag-badge {
+    display: inline-block;
+    padding: var(--s3);
+    border-radius: var(--r-pill);
+    color: var(--surface-backdrop);
+    font-size: var(--label-size);
+    font-weight: var(--label-weight);
+    line-height: var(--label-line);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.tag-badge--jade { background: var(--data-jade); }
+.tag-badge--gold { background: var(--data-gold); }
+.tag-badge--azure { background: var(--data-azure); }
+.tag-badge--rose { background: var(--data-rose); }
+.tag-badge--violet { background: var(--data-violet); }
+
+/* Below the contract's collapse threshold the rail shows icons only and
+   nothing else on screen moves. */
+@media (max-width: 1000px) {
+    .window-frame { grid-template-columns: var(--rail-width-collapsed); }
+    .side-rail__brand, .rail-item__label { display: none; }
+    .rail-item { justify-content: center; padding: var(--s0) var(--s2); }
+}
+

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AI Customer Service Agent</title>
+    <link rel="stylesheet" href="css/nocturne.css">
+    <link rel="stylesheet" href="css/parts.css">
+    <link rel="stylesheet" href="css/controls.css">
+</head>
+<body>
+<!--
+  The shell is empty on purpose: every word on this page comes from
+  GET /api/lang, so no English or Bangla is written into the markup or the
+  JavaScript. app.js fills these landmarks in once the strings have loaded.
+-->
+<div class="window-frame">
+    <nav class="side-rail" id="rail" aria-label="sections"></nav>
+
+    <div class="window-column">
+        <header class="top-bar">
+            <div class="top-bar__title" id="page-title"></div>
+            <span class="top-bar__label" id="active-business-label"></span>
+            <select class="dropdown" id="active-business"></select>
+        </header>
+
+        <main class="plugin-host" id="page"></main>
+
+        <footer class="status-bar">
+            <div class="status-bar__left" id="status-left"></div>
+            <div class="status-bar__right mono" id="status-right"></div>
+        </footer>
+    </div>
+</div>
+
+<div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

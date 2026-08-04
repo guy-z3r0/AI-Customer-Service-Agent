@@ -1,0 +1,24 @@
+# The voice server. Audio arrives over a WebSocket, so nothing here touches a
+# local microphone — PyAudio from version 1 is gone on purpose.
+
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+
+# Speech, when Google Cloud credentials exist.
+google-cloud-speech==2.28.0
+google-cloud-texttospeech==2.21.1
+
+# Voice activity detection: decides when the caller has stopped talking.
+webrtcvad==2.0.10
+
+# Resampling 48 kHz browser audio down to the 16 kHz the recognisers want.
+numpy==1.26.4
+
+# Talking to the Java backend: settings and wording over HTTP, and one
+# websocket per call carrying the conversation itself.
+requests==2.32.3
+websockets==13.1
+
+# The free fallback pair, kept from version 1 so a demo never needs a key.
+SpeechRecognition==3.10.4
+pyttsx3==2.90

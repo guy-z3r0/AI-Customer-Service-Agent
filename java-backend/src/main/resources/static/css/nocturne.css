@@ -1,0 +1,124 @@
+/*
+ * Nocturne — aurora / comfortable / cyan.
+ *
+ * Every colour, gap, radius, font size and control height in the panel comes
+ * from this file, transcribed from /STYLE-CONTRACT.md at the repo root. No
+ * other stylesheet may contain a hex colour or a raw pixel value that is not
+ * one of these tokens; if a screen needs something new, the contract grows a
+ * named part first and this file follows it.
+ */
+
+:root {
+    /* ---- surfaces, text, borders ---- */
+    --surface-backdrop: #0B0E1A;
+    --surface-panel: #151A2C;
+    --surface-raised: #1E2440;
+    --surface-overlay: #242C4A;
+    --border-hairline: #2E3659;
+    --border-strong: #5A6491;
+    --text-primary: #E9ECF6;
+    --text-secondary: #AEB7D1;
+    --text-muted: #8A94B5;
+    --text-disabled: #565F82;
+    --accent: #4FD6EE;
+    --on-accent: #0B0E1A;
+
+    /* ---- data palette: charts and tag badges only ---- */
+    --data-azure: #6BA6FF;
+    --data-gold: #E3B54C;
+    --data-jade: #57C98A;
+    --data-rose: #F2798C;
+    --data-violet: #B18CF5;
+
+    /* ---- states, resolved per surface ---- */
+    --panel-hover: #232839;
+    --panel-pressed: #2C3141;
+    --panel-selected: #1D3447;
+    --raised-hover: #2C314B;
+    --raised-pressed: #343A53;
+    --raised-selected: #253D58;
+    --overlay-hover: #313955;
+    --overlay-pressed: #3A415C;
+    --overlay-selected: #2A4461;
+    --scrim: rgba(0, 0, 0, 0.5);
+
+    /* ---- spacing scale ---- */
+    --s0: 0px;
+    --s1: 2px;
+    --s2: 4px;
+    --s3: 8px;
+    --s4: 12px;
+    --s5: 16px;
+    --s6: 24px;
+    --s7: 32px;
+    --s8: 48px;
+    --s9: 64px;
+
+    /* ---- radii ---- */
+    --r-sm: 4px;
+    --r-md: 8px;
+    --r-lg: 14px;
+    --r-pill: 999px;
+
+    /* ---- fonts ---- */
+    --font-sans: Inter, "Segoe UI", "SF Pro Text", Roboto, sans-serif;
+    --font-mono: "JetBrains Mono", Consolas, Menlo, monospace;
+
+    /* ---- type ramp at comfortable (line height = size + the contract's extra) ---- */
+    --display-size: 28px;
+    --display-weight: 600;
+    --display-line: 32px;
+    --title-size: 22px;
+    --title-weight: 600;
+    --title-line: 26px;
+    --heading-size: 17px;
+    --heading-weight: 600;
+    --heading-line: 20px;
+    --subhead-size: 15px;
+    --subhead-weight: 500;
+    --subhead-line: 18px;
+    --body-size: 14px;
+    --body-weight: 400;
+    --body-strong-weight: 600;
+    --body-line: 20px;
+    --label-size: 12px;
+    --label-weight: 500;
+    --label-line: 14px;
+    --caption-size: 11px;
+    --caption-weight: 400;
+    --caption-line: 13px;
+    --mono-data-size: 13px;
+    --mono-data-weight: 500;
+    --mono-data-line: 15px;
+    --mono-small-size: 11px;
+    --mono-small-weight: 400;
+    --mono-small-line: 13px;
+
+    /* ---- sizing at comfortable ---- */
+    --control-height: 34px;
+    --table-row-height: 36px;
+    --list-row-height: 40px;
+    --rail-width: 220px;
+    --rail-width-collapsed: 56px;
+    --top-bar-height: 52px;
+    --tab-strip-height: 38px;
+    --status-bar-height: 26px;
+    --icon-inline: 16px;
+    --icon-rail: 20px;
+    --window-min-width: 720px;
+    --window-min-height: 480px;
+
+    /* ---- elevation ---- */
+    --shadow-panel: 0 4px 14px rgba(0, 0, 0, 0.38);
+    --shadow-overlay: 0 10px 28px rgba(0, 0, 0, 0.50);
+
+    /* ---- motion: only toasts, tooltips, dialogs and the rail may move ---- */
+    --motion-fast: 120ms;
+    --motion-medium: 180ms;
+    --motion-slow: 240ms;
+
+    /* ---- borders ---- */
+    --focus-ring-width: 2px;
+    --focus-ring-gap: 2px;
+    --hairline: 1px;
+}
