@@ -1,159 +1,125 @@
 # AI Customer Service Agent
 
-A voice-based customer service agent. You speak into the microphone, the app
-turns your speech into text, an AI (Google Gemini) writes a reply using the
-business's own knowledge files, and the reply is **spoken back out loud**.
+A bilingual voice agent that answers a small business's phone. It greets the
+caller, works out what kind of call it is, answers from that business's own
+knowledge base, recognises customers it has met before, writes new ones down,
+hands the difficult ones to a person by email, and files a written summary of
+every call.
 
-Everything is stored as simple JSON files — no database needed.
+English and Bangla, chosen by the caller at the greeting and switchable
+mid-call. Placed from a browser tab by default, or over a real telephone line
+when Twilio credentials are configured.
 
-## How it works (short version)
+Everything a business needs — its details, its knowledge, its persona, its
+customers, its opening hours, its escalation contacts, every API key — is
+editable in the browser while the app is running. There is no configuration
+file to redeploy and no code to change to onboard a second business.
 
-```
-Your voice → Google Speech-to-Text → Gemini AI → reply text → Text-to-Speech (spoken back)
-                                        ↑
-                     business + client knowledge from JSON files
-```
+---
 
-Two programs cooperate:
+## Running it
 
-| Part | Folder | Job |
-|------|--------|-----|
-| **Java backend** (Spring Boot) | `java-backend/` | The operator console, all data files, the REST API on `localhost:8080` |
-| **Python scripts** | `python-scripts/` | Microphone, speech-to-text, the Gemini call, text-to-speech |
-
-Java starts the Python process when a call starts and stops it when the call
-ends. They only talk over HTTP (`/api/...`).
-
-## Setup
-
-You need: **Java 21+**, **Maven**, **Python 3.10+**, a microphone and speakers.
+You need **Docker Desktop**, and nothing else:
 
 ```bash
-# 1. Python dependencies (one time)
-cd python-scripts
-python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt        # Windows
-
-# 2. Put your Gemini API key in java-backend/data/config.json  ("apiKey": "...")
-
-# 3. Run the backend (it launches Python by itself during calls)
-cd ../java-backend
-mvn spring-boot:run
+cp .env.example .env
+docker compose up --build
 ```
 
-## Console commands
+Open **http://localhost:8080**. That is the whole install. Every credential
+ships as a fake `PLACEHOLDER_` value and every feature that needs one switches
+itself off politely until you fill it in, so the panel runs, the database is
+seeded, and you can look around before you have an API key.
 
-The app gives you an `agent>` prompt:
+No Docker? `./run-local.ps1` on Windows starts a real PostgreSQL as a child
+process of the backend, plus the voice server, in two console windows. It needs
+Java 21 and Python 3.10+.
 
-| Command | What it does |
-|---------|--------------|
-| `help` | Show all commands |
-| `status` | Show the active call (mode, caller, transcript) |
-| `businesses` | List registered businesses |
-| `add-business <name>` | Register a new business |
-| `use <name>` | Pick the active business |
-| `start-call` | Start a call as an **unknown caller** (New Customer mode) |
-| `start-call <client_id>` | Start a call as a **known client** (Existing Customer mode), e.g. `start-call C001` |
-| `end-call` | End the call and save history + transcript |
-| `clients` | List the clients of the active business |
-| `intel` | Print the business knowledge the AI receives |
-| `set-mode <mode>` | Force a call mode by hand (for testing) |
-| `ai` | Show the AI persona settings |
-| `config` | Show global config |
-| `refresh` | Re-read all JSON files from disk |
-| `exit` | Shut down |
+To make it actually talk you need one language-model key.
+**[docs/SETUP.md](docs/SETUP.md)** is the first-run walkthrough;
+**[docs/KEYS_FOR_TESTING.md](docs/KEYS_FOR_TESTING.md)** covers the optional
+speech and email credentials, with links.
 
-## The four call modes
+---
 
-| Mode | How it starts | What the AI does |
-|------|--------------|------------------|
-| **New Customer** | `start-call` | Greets, asks the caller's name and needs, explains services |
-| **Existing Customer** | `start-call <client_id>` | Greets the client by name, uses their notes and past issues |
-| **Wrong / Scam Number** | AI detects it mid-call (or `set-mode wrong_number`) | Stays polite, shares nothing, ends the call |
-| **Complex Request** | AI detects it mid-call (or `set-mode complex_request`) | Says a human agent will take over; the AI then stays quiet (simulated hand-over) |
+## What it does
 
-Mid-call detection works with tags: the AI is told it may end a reply with
-`[MODE:WRONG_NUMBER]` or `[MODE:COMPLEX_REQUEST]`. Python strips the tag
-before speaking and reports the switch to Java (`POST /api/call-mode`).
+| | |
+|---|---|
+| **Answers from the business, not from the internet** | The prompt is assembled per call from that business's about text, services, prices, policies, FAQs, contact details and opening hours. The standing orders say to use nothing else and to never invent a price. |
+| **Screens the call four ways** | New caller, known customer, wrong number, or something a person has to take over. The agent reclassifies mid-call through a tool call, and a legality table refuses moves that make no sense — from the model *and* from the operator. |
+| **Speaks both languages** | The greeting asks which, in both, each half in its own voice. A caller can switch at any point. Banglish gets a re-prompt rather than silence. |
+| **Knows who is calling** | A customer code read out, or the number a call came in on, identifies a caller mid-conversation. A stranger who gives a name and number is written to the customer records during the call. |
+| **Hands over properly** | A refund it cannot approve or a caller who asks for a person moves the call to handover, and the colleague gets an email with a summary, the reason, and the transcript when the call ends. |
+| **Keeps personal details out of the post** | ID numbers, phone numbers, email addresses and money amounts are masked before anything reaches the model, the summary or the email. The transcript keeps what was really said, because the operator is supervising the call. |
+| **Answers in under two seconds** | Streaming throughout: speech recognition streams, the model streams, and each sentence goes to the voice the moment it is finished rather than when the whole reply is. Every turn's timings are stored, so a slow reply can be blamed on the right stage. |
 
-## Data files (the "database")
+---
+
+## How it fits together
 
 ```
-java-backend/data/
-├── config.json                     global settings (API key, STT + TTS tuning)
-└── businesses/<name>/
-    ├── business.json               id, name, contact details
-    ├── ai-settings.json            AI persona (model, role, reply style)
-    ├── intelligence.json           what the AI knows about the business ★
-    ├── clients.json                the business's clients ★
-    ├── call-history.json           every finished call
-    └── transcripts/<callId>.txt    readable transcript per call
+browser tab ──mic audio──▶ python-voice ──words──▶ java-backend ──▶ Gemini / OpenAI
+  or a phone ──Twilio──▶      :8090        WS       :8080  │           (swappable)
+                                ▲                          ▼
+                            speech ◀──sentences──   PostgreSQL
 ```
 
-★ = the knowledge files you edit to make the AI smarter. They are re-read at
-the start of every call, so edit → `start-call` is enough (no restart).
+Three processes. The **panel and the brain** are one Spring Boot app: REST for
+every screen, a websocket per call to the voice server, and another to the
+panel for the live transcript. The **voice server** is FastAPI and holds no
+business knowledge at all — it carries audio, recognises speech, and speaks
+whatever the brain sends it. **PostgreSQL** holds everything, with customer
+phone numbers and email addresses encrypted in the columns.
 
-**`intelligence.json`** — business knowledge: `about` (one paragraph),
-`services` (list), `policies` (list), `faqs` (question/answer pairs).
+Audio never touches Java, and text never touches the audio socket. That is
+where the two-second budget is won.
 
-**`clients.json`** — per-client intelligence: each client has a `clientId`
-(what you type in `start-call C001`), `name`, contact info, `notes` free text,
-and `pastIssues` (list of earlier problems). New businesses get starter
-template files automatically.
+| Folder | What is in it |
+|---|---|
+| `java-backend/src/main/java/com/ulab/agent/` | `api/` controllers and websockets · `brain/` the conversation, screening and tools · `brain/llm/` Gemini and OpenAI behind one interface · `services/` the domain · `domain/` + `repo/` the data · `utils/` strings, prompts, PII masking |
+| `java-backend/src/main/resources/static/` | The control panel: vanilla JS, no build step |
+| `java-backend/src/main/resources/db/migration/` | Flyway migrations, including the seeded example businesses |
+| `python-voice/` | `server.py` · `session.py` turn-taking · `transports/` browser and Twilio · `pipeline/` VAD, speech recognition, speech synthesis, and their free fallbacks |
+| `docs/ors/` | The build record: proposal, spec, phases, architecture, and a log + test script per phase |
 
-## Text-to-speech settings
+---
 
-In `data/config.json` (applied at the next call):
+## Things worth knowing
 
-| Field | Meaning |
-|-------|---------|
-| `ttsEnabled` | `false` = replies are text-only |
-| `ttsRate` | speaking speed, words per minute (170 ≈ natural) |
-| `ttsVolume` | `0.0` – `1.0` |
-| `ttsVoice` | part of an installed voice name (e.g. `"Zira"`), empty = default |
+**Nothing is hard-wired to one vendor.** Gemini and OpenAI sit behind one
+interface, and which one answers is read fresh at the start of every call —
+from the business's own settings first, the global Settings page second.
+Changing it in the panel changes the next call.
 
-TTS runs offline through the operating system's voices (pyttsx3).
-Run `python tts_speaker.py` inside `python-scripts` to list your voices
-and hear a test sentence.
+**It works with no accounts at all.** Without Google Cloud credentials the
+voice server falls back to a free offline recogniser and voice. Without a model
+key the agent still answers the phone and says, out loud and in both languages,
+that it cannot answer questions. Without SMTP an escalation is written to the
+log in full rather than lost. A demo never fails because something was not
+configured; it degrades in a way you can see.
 
-## REST API (Java ⇄ Python)
+**The panel holds no words.** Every string a person reads comes from
+`utils/Lang.java` over `GET /api/lang?lang=en|bn` — 301 entries, both
+languages. Changing a wording is a change to one catalogue and nothing else.
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/api/config` | Python fetches global settings at call start |
-| POST | `/api/config` | Overwrite global settings |
-| GET | `/api/ai-settings` | AI persona of the active business |
-| POST | `/api/ai-settings` | Update the persona |
-| GET | `/api/call-context` | Mode instructions + business info + client info + greeting |
-| POST | `/api/call-mode` | Python reports a mode switch flagged by the AI |
-| POST | `/api/chat-message` | Every live line (user / ai / system) |
-| POST | `/api/transcript` | Full transcript, sent once at call end |
+**Two example businesses ship with it.** Template Business is a generic shop
+whose knowledge base is deliberately obvious filler. Demo Courier is a parcel
+service with different hours, prices, policies and persona. Switching between
+them in the top bar changes what the agent says, who it recognises and how it
+introduces itself, with no code involved — that is the point of having a
+second one.
 
-## Project layout
+---
 
-```
-java-backend/src/main/java/com/ulab/agent/
-├── Main.java          entry point
-├── ai/                CallMode enum (the 4 scenarios + AI instructions)
-├── api/               all REST controllers + request/response classes
-├── managers/          the logic: Config, Business, AISettings, Call, Intelligence
-├── models/            data classes stored as JSON
-└── utils/             console, file/path/time helpers, all UI strings (Lang)
+## Documentation
 
-python-scripts/
-├── stt_sender.py      microphone loop + language switching (main file)
-├── ai_agent.py        builds the prompt, calls Gemini, detects mode tags
-├── tts_speaker.py     speaks text out loud
-└── config.py          fetches runtime config from Java
-```
+| | |
+|---|---|
+| [docs/SETUP.md](docs/SETUP.md) | First run, the panel tour, entering keys, editing a business |
+| [docs/KEYS_FOR_TESTING.md](docs/KEYS_FOR_TESTING.md) | Google speech and SMTP credentials, step by step, with links |
+| [docs/ors/architecture.md](docs/ors/architecture.md) | What each phase built and the rules it set |
+| [docs/ors/logs/](docs/ors/logs/) | A log and a runnable test script for every phase |
+| [STYLE-CONTRACT.md](STYLE-CONTRACT.md) | The design contract the panel is built from |
 
-More detail: open `report_dashboard.html` in a browser.
-
-## Notes
-
-- The AI remembers the conversation during one call (last 20 lines) and
-  forgets it when the call ends.
-- While the AI is speaking, the microphone is not listening — this stops the
-  AI from hearing itself.
-- Keep your real API key out of public repos: `data/config.json` is meant for
-  local use.
+Built in seven phases; `docs/ors/PROJECT_STATE.md` says where it stands.

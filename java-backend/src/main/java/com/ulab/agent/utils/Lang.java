@@ -52,7 +52,17 @@ public final class Lang {
     public static final String ERR_CALL_NOT_LIVE = "That call is not running.";
     public static final String ERR_MODE_NOT_ALLOWED =
             "A call cannot move to that screening mode from where it is now.";
+    public static final String ERR_TWILIO_NOT_SET_UP =
+            "Telephone calling needs its Twilio settings filled in first.";
     public static final String ERR_VALIDATION = "Some fields need fixing.";
+
+    // -------------------------------------------- spoken by Twilio, not by us --
+    // These reach a caller through Twilio's own voice, before this app has said
+    // anything or anybody has chosen a language, so they are English only.
+    public static final String SPOKEN_TWILIO_NOT_SET_UP =
+            "Sorry, this number is not set up to take calls yet. Goodbye.";
+    public static final String SPOKEN_TWILIO_NO_BUSINESS =
+            "Sorry, there is nobody available to take this call. Goodbye.";
     public static final String ERR_CONFLICT = "That change clashes with something already saved.";
     public static final String ERR_UNEXPECTED = "Something went wrong on the server.";
 
@@ -181,6 +191,13 @@ public final class Lang {
         m.put("settings.badge_placeholder", pair("PLACEHOLDER", "PLACEHOLDER"));
         m.put("settings.secret_hint", pair("Leave blank to keep the stored value",
                 "সংরক্ষিত মান রাখতে ফাঁকা রাখুন"));
+        m.put("settings.voice_default", pair("Whichever the provider picks",
+                "প্রোভাইডার যেটি বেছে নেয়"));
+        m.put("settings.voice_absent", pair("not installed here", "এই মেশিনে নেই"));
+        // One %s only: the panel replaces the first it finds.
+        m.put("settings.no_voice_for", pair(
+                "No voice on this machine speaks %s, so it will be read by the wrong one. Add Google Cloud credentials, or install a matching speech voice in Windows.",
+                "এই মেশিনের কোনো কণ্ঠ %s বলতে পারে না, তাই ভুল কণ্ঠে পড়া হবে। গুগল ক্লাউড ক্রেডেনশিয়াল দিন, অথবা উইন্ডোজে মিল রেখে একটি স্পিচ ভয়েস ইনস্টল করুন।"));
         m.put("settings.group.llm", pair("Language model", "ভাষা মডেল"));
         m.put("settings.group.voice", pair("Speech", "কণ্ঠস্বর"));
         m.put("settings.group.call", pair("Call behaviour", "কলের আচরণ"));

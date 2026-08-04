@@ -76,9 +76,11 @@ public class CallLogService {
         call.setBusinessId(business.getId());
         call.setTelephony(telephonyOf(request.telephony()));
         call.setFinalLanguage(Language.of(request.language()));
-        // Dialling as a known customer from the panel: the call opens already
-        // knowing who it is with, rather than having to ask.
+        // Two ways a call can open already knowing who it is with: dialled as a
+        // known customer from the panel, or rung in from a number on the books.
+        // Neither is guaranteed, and a call that recognises nobody is normal.
         clients.byCode(business.getId(), request.clientCode())
+                .or(() -> clients.byPhone(business.getId(), request.callerNumber()))
                 .ifPresent(client -> call.setClientId(client.id()));
         calls.save(call);
 

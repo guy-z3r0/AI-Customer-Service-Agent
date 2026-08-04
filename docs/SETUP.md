@@ -69,8 +69,10 @@ Open **http://localhost:8080**.
 
 ## 4. A tour of the panel
 
-**The rail down the left** lists the six sections. **Businesses**, **Settings**
-and **Live call** are built; the other three say which phase they arrive in.
+**The rail down the left** lists the six sections, all of them built:
+**Dashboard** for what the system holds and what works right now, **Live call**
+to place one, **Businesses** and **Clients** for what the agent knows,
+**Call history** for what it has done, and **Settings**.
 
 **The bar at the top** shows which business is active — the one whose knowledge
 and persona the next call will use. Change it from the dropdown at any time.
@@ -119,38 +121,185 @@ same apology — it has nothing to think with. Fill in **one** of them:
 Then set **Provider** to `gemini` or `openai` to match. Press **Save settings**.
 The health line at the bottom should change to `Language model: … ready`.
 
-### Optional: Google Cloud speech
+### Speech recognition and the agent's voice
 
-Needed for the good voices and the streaming speech recognition. Without it the
-voice pipeline falls back to the free offline providers, which is slower and
-rougher but works with no account at all.
+Without any of this the app still makes calls: it falls back to the free
+offline recogniser and to whatever voices Windows or the container already has.
+Those voices are the robotic ones, and **they are almost certainly English
+only** — which is what makes Bangla sound wrong. See
+[Bangla](#bangla-needs-its-own-voice) below.
 
-1. In the Google Cloud console, enable **Cloud Speech-to-Text** and
-   **Cloud Text-to-Speech**.
-2. Create a service account, download its JSON key.
-3. Save it as `secrets/gcp-credentials.json` in this repository.
+**What you get for setting it up:** streaming recognition instead of
+record-then-send, natural Neural2 voices, and Bangla that actually sounds like
+Bangla.
 
-`secrets/` is ignored by git, so the key cannot be committed by accident.
-`secrets/gcp-credentials.json.PLACEHOLDER` shows the shape of the file.
+**1. Create a project.** https://console.cloud.google.com/ → the project
+dropdown → **New Project**.
 
-### Later: escalation email (Phase 6)
+**2. Turn on billing.** https://console.cloud.google.com/billing → link a
+billing account. The speech APIs will not enable without one, even to use the
+free monthly allowance. Check current prices yourself before relying on them:
+[speech-to-text](https://cloud.google.com/speech-to-text/pricing) ·
+[text-to-speech](https://cloud.google.com/text-to-speech/pricing).
 
-`SMTP host`, `SMTP port`, `SMTP username`, `SMTP password`, `Send from address`.
-A Gmail account with an app password works, and so does a Mailtrap inbox if you
-would rather test without emailing anyone real. Use port **587**, not 465. Until
-these are set, a call that needs a human is written to the log instead of
-emailed — nothing breaks.
+**3. Enable both APIs.** Open each and press **Enable**:
 
-**[KEYS_FOR_TESTING.md](KEYS_FOR_TESTING.md)** walks the speech and email
-credentials properly, with links and the path gotcha that catches people running
-without Docker.
+- https://console.cloud.google.com/apis/library/speech.googleapis.com
+- https://console.cloud.google.com/apis/library/texttospeech.googleapis.com
 
-### Later: Twilio (Phase 7, optional)
+**4. Make a service account.**
+https://console.cloud.google.com/iam-admin/serviceaccounts → **Create service
+account** → name it `voice-server` → give it the role **Cloud Speech Client**,
+and nothing broader.
 
-`Account SID`, `Auth token`, `API key SID`, `API key secret`, `TwiML app SID`,
-`Caller number`, and a `Public media URL` (an ngrok address, because Twilio has
-to reach your machine from the internet). Until these are set, the Twilio button
-on the Live Call page is disabled and browser calling works as normal.
+**5. Download its key.** Open the account → **Keys** → **Add key → Create new
+key → JSON**. Save the file as `secrets/gcp-credentials.json` in this
+repository. `secrets/` is gitignored, so it cannot be committed by accident;
+`secrets/gcp-credentials.json.PLACEHOLDER` shows the shape.
+
+**6. Point the app at it — and read this if you are not using Docker.** The
+**Google credentials file** setting is `./secrets/gcp-credentials.json`, a
+*relative* path:
+
+| How you run it | Where that lands | Works? |
+|---|---|---|
+| `docker compose up` | `/app/secrets/…`, which is your `secrets/` folder mounted in | yes |
+| `run-local.ps1` or `mvn spring-boot:run` | `java-backend/secrets/…` and `python-voice/secrets/…`, neither of which exists | **no** |
+
+So outside Docker, set that setting to an **absolute** path:
+
+```
+F:\3.GitHub_ORS\AI-Customer-Service-Agent\secrets\gcp-credentials.json
+```
+
+The Dashboard's **Speech recognition and voice** line changes from "Free
+fallback" to "Ready" within a few seconds when the app can really see the file.
+That line is a reliable test — it checks for a real, non-empty file at exactly
+that path.
+
+**7. Pick the voices.** Settings has an **English voice** and a **Bangla voice**
+dropdown, listing what this installation can really speak with. It reads them
+from the voice server, so it shows Google's voices once step 6 is done and the
+machine's own before that. Leave either on *"Whichever the provider picks"* to
+let it choose.
+
+#### Bangla needs its own voice
+
+A voice reads letters; it does not translate. Give Bengali text to an English
+voice and you get English pronunciation of Bengali script, which is the
+gibberish you may have already heard. The agent now picks a voice matching the
+call's language — but it can only pick from what exists.
+
+**A fresh Windows install has English voices only.** If Settings shows a red
+line saying no voice speaks Bangla, that is this. Two ways out:
+
+- **Google Cloud** (recommended, and the reason to do the steps above) — its
+  `bn-IN` voices are far better than anything offline. Recognition uses
+  `bn-BD`; the voice uses `bn-IN`, because that is where Google has Bangla
+  voices.
+- **A Windows Bangla voice** — Settings → Time & language → Language & region →
+  **Add a language** → বাংলা, and tick **Speech** among the optional features.
+  Then restart the voice server so it re-reads the list. Availability varies by
+  Windows edition, and the quality is well below Google's.
+
+Until one of those exists, Bangla replies come out in an English voice. The
+panel says so rather than pretending otherwise.
+
+### Escalation email
+
+When the agent hands a call to a person, the colleague gets an email with the
+summary, the reason and the masked transcript. Until SMTP is configured that
+email is written to the log in full instead — the escalation is never lost, it
+just does not travel.
+
+**Five settings:** `SMTP host`, `SMTP port`, `SMTP username`, `SMTP password`,
+`Send from address`. Pick one of three ways to fill them:
+
+| | Host | Port | Good for |
+|---|---|---|---|
+| **Mailtrap** (easiest to test with) | `sandbox.smtp.mailtrap.io` | 587 | Catches mail instead of delivering it, so nothing can reach a real person by accident. No card, no phone number. https://mailtrap.io/ |
+| **Gmail** | `smtp.gmail.com` | 587 | Landing in a real inbox you own |
+| **Brevo** | `smtp-relay.brevo.com` | 587 | Reaching real addresses without involving your personal Gmail. https://www.brevo.com/ |
+
+**For Gmail you need an app password, not your normal one.** Turn on 2-Step
+Verification first (https://myaccount.google.com/signinoptions/two-step-verification),
+then create one at https://myaccount.google.com/apppasswords. Google shows the
+16-character password once. `Send from address` must be that same Gmail address —
+Gmail refuses to send as anyone else.
+
+**Use port 587, not 465.** This app negotiates STARTTLS on a plain connection,
+which is what 587 expects. On 465 the send simply times out. If you have tried
+465 and seen nothing arrive, that is why.
+
+**Then say who receives it.** The seeded businesses list a fake escalation
+contact, so even perfect SMTP settings would send the email nowhere useful. Go
+to **Businesses → What it says → Hours & handover** and put a real address in
+*"Who takes a call the agent cannot"*.
+
+If a send fails the backend tries once more, then writes the whole message it
+could not send to the log.
+
+**[KEYS_FOR_TESTING.md](KEYS_FOR_TESTING.md)** covers the same credentials
+oriented around the Phase 6 test script, including which test steps need which.
+
+### Optional: Twilio, for calls over a real telephone line
+
+Browser calling needs no accounts and is the demo default. Twilio adds a real
+phone number. Until every setting below holds a real value the **Twilio call**
+button stays disabled with a tooltip saying so, and nothing else changes.
+
+**You will need:** a Twilio account (https://www.twilio.com/try-twilio) and
+ngrok (https://ngrok.com/download). ngrok is not optional — Twilio's media
+stream has to reach your machine from the internet, and your machine is behind
+a router.
+
+**1. Start ngrok** against the voice server, not the panel:
+
+```bash
+ngrok http 8090
+```
+
+Copy the forwarding host it prints — the `abc123.ngrok-free.app` part, without
+`https://`. That goes in **Public media URL**. It changes every time you restart
+ngrok on a free account, and a stale one is the single most common reason a
+Twilio call connects and then goes silent.
+
+**2. In the Twilio console** (https://console.twilio.com/):
+
+| Where | What to copy |
+|---|---|
+| Account dashboard | **Account SID** |
+| Account dashboard | **Auth token** |
+| Account → API keys & tokens → Create API key (Standard) | **API key SID** and **API key secret** — the secret is shown once |
+| Phone Numbers → Manage → Buy a number (a trial gives you one free) | **Caller number** |
+| Voice → TwiML → TwiML Apps → Create | **TwiML app SID** |
+
+On the TwiML App, set its **Voice Request URL** to your ngrok address plus the
+path, with the method **POST**:
+
+```
+https://abc123.ngrok-free.app/api/twilio/voice
+```
+
+Note that this one points at ngrok forwarding to **8080**, the panel, while the
+media URL points at **8090**, the voice server. If you only want to run one
+ngrok tunnel, point it at 8080 and put your backend behind it — but two tunnels
+is simpler to reason about, and ngrok's free plan allows one at a time, so most
+people run the media tunnel and use a paid plan or a second machine for the
+webhook.
+
+**3. Paste all seven values into Settings** and save. Reload the Live Call page:
+the **Twilio call** button is now enabled. Press it and the call runs through
+exactly the same brain, knowledge base and transcript as a browser call — the
+only thing that changed is who carries the audio.
+
+**Trial account caveats**, which will affect your demo:
+
+- A trial can only call **verified** numbers. Verify your own under Phone
+  Numbers → Verified Caller IDs before you test.
+- Twilio speaks a **"you have a trial account"** message before connecting every
+  call. It is not coming from this app and cannot be suppressed on a trial.
+- Trial credit is small. A demo costs cents, but it does run out.
 
 ---
 
@@ -200,7 +349,26 @@ is not meant to be reachable from the network.
 
 ---
 
-## 8. If something goes wrong
+## 8. Call behaviour you can tune
+
+**Settings → Call behaviour** holds two numbers, both in seconds:
+
+| Setting | What it does |
+|---|---|
+| `Warn after silence` | How long a caller may say nothing before the agent asks "Are you still there?" |
+| `Hang up after silence` | How long before it says goodbye and ends the call |
+
+Both are measured **from the moment the agent stops speaking**, not from when
+the call connected. That distinction matters: the greeting and the bilingual
+language question take around thirteen seconds to read out, so a clock started
+at connect would spend most of the allowance before the caller could get a word
+in. If the agent seems to interrupt you almost immediately, check that the
+voice server is running — it is the half that reports when the audio has
+finished playing.
+
+---
+
+## 9. If something goes wrong
 
 **The panel loads but the health line says `Database: down`.**
 Postgres has not finished starting, or the password in `.env` does not match the

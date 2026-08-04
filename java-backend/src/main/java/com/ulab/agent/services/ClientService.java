@@ -99,14 +99,36 @@ public class ClientService {
      */
     @Transactional(readOnly = true)
     public Optional<ClientDtos.ClientView> byPhone(UUID businessId, String phone) {
-        if (phone == null || phone.isBlank()) return Optional.empty();
+        if (!isMatchable(phone)) return Optional.empty();
 
-        String wanted = digitsOf(phone);
         return list(businessId).stream()
-                .filter(client -> !digitsOf(client.phone()).isEmpty())
-                .filter(client -> digitsOf(client.phone()).endsWith(wanted)
-                        || wanted.endsWith(digitsOf(client.phone())))
+                .filter(client -> sameNumber(client.phone(), phone))
                 .findFirst();
+    }
+
+    /**
+     * Whether two numbers belong to the same person.
+     *
+     * A caller reads their number out however they think of it, so the
+     * comparison is on digits alone and either may be the longer — +8801711…
+     * and 01711… are one person. Both sides must carry enough digits to mean
+     * something: a masked number arrives here as "[MASKED_PHONE]", which has no
+     * digits at all, and a rule that let it through would match whoever
+     * happened to be first on the books and greet a stranger by their name.
+     */
+    static boolean sameNumber(String stored, String given) {
+        if (!isMatchable(stored) || !isMatchable(given)) return false;
+
+        String a = digitsOf(stored);
+        String b = digitsOf(given);
+        return a.endsWith(b) || b.endsWith(a);
+    }
+
+    /** Enough digits that an accidental match is not worth worrying about. */
+    private static final int MATCHABLE_DIGITS = 6;
+
+    private static boolean isMatchable(String phone) {
+        return phone != null && digitsOf(phone).length() >= MATCHABLE_DIGITS;
     }
 
     // --------------------------------------------------------------- writes --

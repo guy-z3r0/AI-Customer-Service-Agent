@@ -9,17 +9,25 @@
  */
 
 import { api } from '../api.js';
-import { button, element, keyValueRow, tagBadge } from '../components.js';
+import { button, dropdown, element, keyValueRow, tagBadge } from '../components.js';
 
 const GROUP_ORDER = ['llm', 'voice', 'call', 'twilio', 'email', 'other'];
 
+// The two settings that name a voice. They get a menu of what is really
+// installed rather than a blank box, because nobody can be expected to know
+// what a voice on this machine is called.
+const VOICE_KEYS = { tts_voice_en: 'en', tts_voice_bn: 'bn' };
+
 export async function renderSettings(host, ctx) {
     const entries = await api.get('/api/config');
+    const catalogue = await loadVoices();
     const t = ctx.strings;
 
     const panel = element('div', 'panel');
     panel.appendChild(element('div', 'section-header', t['settings.title']));
     panel.appendChild(element('p', 'muted-body', t['settings.note']));
+    const warning = missingVoiceWarning(catalogue, t);
+    if (warning) panel.appendChild(warning);
 
     const form = element('form');
     form.addEventListener('submit', (event) => {
@@ -32,7 +40,8 @@ export async function renderSettings(host, ctx) {
         if (inGroup.length === 0) return;
         form.appendChild(element('div', 'section-header', t[`settings.group.${group}`]));
         const grid = element('div', 'key-value');
-        inGroup.forEach((entry) => keyValueRow(grid, label(entry, ctx), field(entry, ctx)));
+        inGroup.forEach((entry) => keyValueRow(grid, label(entry, ctx),
+            field(entry, ctx, catalogue)));
         form.appendChild(grid);
     });
 
@@ -56,7 +65,42 @@ function label(entry, ctx) {
     return wrap;
 }
 
-function field(entry, ctx) {
+/**
+ * The voices this machine can really speak with, or nothing if the voice
+ * server is down — in which case the fields stay the text boxes they were.
+ */
+async function loadVoices() {
+    try {
+        return await api.get('/api/config/voices');
+    } catch (error) {
+        return { voices: [], speaks: [], provider: 'unknown' };
+    }
+}
+
+/**
+ * Says so when a language has no voice at all.
+ *
+ * This is the difference between "Bangla is broken" and "this computer has no
+ * Bangla voice installed", which are the same symptom and completely different
+ * problems. A fresh Windows install has English voices only.
+ */
+function missingVoiceWarning(catalogue, t) {
+    if (catalogue.voices.length === 0) return null;
+    const missing = ['en', 'bn'].filter((code) => !catalogue.speaks.includes(code));
+    if (missing.length === 0) return null;
+
+    const line = element('p', 'inline-error');
+    line.textContent = missing
+        .map((code) => t['settings.no_voice_for'].replace('%s', t[`language.${code}`]))
+        .join(' ');
+    return line;
+}
+
+function field(entry, ctx, catalogue) {
+    if (VOICE_KEYS[entry.key] && catalogue.voices.length > 0) {
+        return voiceField(entry, ctx, catalogue);
+    }
+
     const wrap = element('div');
     const input = element('input', 'text-field');
     input.name = entry.key;
@@ -74,6 +118,34 @@ function field(entry, ctx) {
 
     input.value = entry.value;
     wrap.appendChild(input);
+    return wrap;
+}
+
+/**
+ * A menu of the voices that speak this setting's language.
+ *
+ * Voices for the other language are left out — picking an English voice to
+ * read Bangla is exactly the mistake that makes a call sound broken. The
+ * stored value is kept as an option even when it is not installed here, so
+ * opening Settings on a machine without it does not silently discard it.
+ */
+function voiceField(entry, ctx, catalogue) {
+    const language = VOICE_KEYS[entry.key];
+    const suitable = catalogue.voices.filter((voice) => voice.language === language);
+
+    const options = [{ value: '', label: ctx.strings['settings.voice_default'] }];
+    suitable.forEach((voice) => options.push({ value: voice.id, label: voice.name }));
+    if (entry.value && !suitable.some((voice) => voice.id === entry.value)) {
+        options.push({ value: entry.value, label: `${entry.value} — ${ctx.strings['settings.voice_absent']}` });
+    }
+
+    const select = dropdown(options, entry.value || '', () => {});
+    select.name = entry.key;
+    if (suitable.length === 0) select.title = ctx.strings['settings.no_voice_for']
+        .replace('%s', ctx.strings[`language.${language}`]);
+
+    const wrap = element('div');
+    wrap.appendChild(select);
     return wrap;
 }
 

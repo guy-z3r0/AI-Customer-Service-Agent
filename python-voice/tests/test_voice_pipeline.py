@@ -11,6 +11,7 @@ Run with:  cd python-voice && python -m pytest
 """
 
 import asyncio
+import json
 import os
 import sys
 
@@ -152,7 +153,7 @@ class FakeBrain:
                                 "language": "en", "last": False})
         await self._on_message({"type": "say", "seq": 0, "text": "English or Bangla?",
                                 "language": "en", "last": False})
-        await self._on_message({"type": "say", "seq": 0, "text": "ইংরেজি না বাংলা?",
+        await self._on_message({"type": "say", "seq": 0, "text": "à¦‡à¦‚à¦°à§‡à¦œà¦¿ à¦¨à¦¾ à¦¬à¦¾à¦‚à¦²à¦¾?",
                                 "language": "bn", "last": True})
 
     async def deliver(self, message):
@@ -333,7 +334,7 @@ def test_each_half_of_the_greeting_is_said_in_its_own_language(wired):
     assert wired.spoken_in == [
         ("Hello, Example Shop.", "en"),
         ("English or Bangla?", "en"),
-        ("ইংরেজি না বাংলা?", "bn"),
+        ("à¦‡à¦‚à¦°à§‡à¦œà¦¿ à¦¨à¦¾ à¦¬à¦¾à¦‚à¦²à¦¾?", "bn"),
     ]
     # One agent turn covers the whole greeting: the microphone opens once, at
     # the end of it, not between the two halves of the question.
@@ -368,7 +369,7 @@ def test_switching_language_changes_the_voice_for_what_follows(wired):
         call = session_module.VoiceSession("test-call", recorder.send_json, recorder.send_audio)
         await call.start("en")
         await wired.brain.deliver({"type": "set_language", "language": "bn"})
-        await wired.brain.deliver({"type": "say", "seq": 1, "text": "ঠিক আছে।", "last": True})
+        await wired.brain.deliver({"type": "say", "seq": 1, "text": "à¦ à¦¿à¦• à¦†à¦›à§‡à¥¤", "last": True})
         await _settle()
         await call.close()
         return call
@@ -376,7 +377,7 @@ def test_switching_language_changes_the_voice_for_what_follows(wired):
     call = asyncio.run(scenario())
 
     assert call.language == "bn"
-    assert wired.spoken_in[-1] == ("ঠিক আছে।", "bn"), "the new language is the default now"
+    assert wired.spoken_in[-1] == ("à¦ à¦¿à¦• à¦†à¦›à§‡à¥¤", "bn"), "the new language is the default now"
     assert any(m.get("type") == "ready" and m.get("language") == "bn" for m in recorder.json)
 
 
@@ -416,6 +417,14 @@ def test_a_brain_that_cannot_be_reached_apologises_and_ends_the_call(wired):
 
 
 async def _settle():
-    """Let the turn tasks, which the recogniser callback starts, actually run."""
-    for _ in range(40):
+    """Let the turn tasks, which the recogniser callback starts, actually run.
+
+    Long enough to cover the wait at the end of a turn as well. The session
+    holds the turn open until its audio would have finished playing, and the
+    stand-in voice returns a quarter of a second per sentence — so a
+    three-sentence greeting is three quarters of a second of waiting before
+    the microphone is handed back.
+    """
+    for _ in range(200):
         await asyncio.sleep(0.01)
+

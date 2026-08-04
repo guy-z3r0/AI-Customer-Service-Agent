@@ -10,6 +10,7 @@
  */
 
 import { api } from '../api.js';
+import { outcomeBadge } from '../call_outcome.js';
 import { button, element, table, tagBadge } from '../components.js';
 
 const LATENCY_TARGET_MS = 2000;
@@ -182,12 +183,7 @@ function buildRecentCalls(summary, ctx) {
     panel.appendChild(table([
         { label: t['dash.col_started'], value: (call) => shortTime(call.startedAt) },
         { label: t['dash.col_business'], value: (call) => call.business },
-        {
-            label: t['dash.col_mode'],
-            render: (call) => call.mode
-                ? tagBadge(t[`mode.${call.mode.toLowerCase()}`], MODE_HUE[call.mode] || 'azure')
-                : element('span', null, '')
-        },
+        { label: t['dash.col_mode'], render: (call) => outcomeBadge(call, t) },
         { label: t['dash.col_turns'], numeric: true, value: (call) => call.turns },
         {
             label: t['dash.col_length'],

@@ -69,6 +69,12 @@ final class LangPages {
 
         // Said in the panel, in the downloaded file and in the escalation email,
         // which is why these two are not under any one of those headings.
+        // How a call is described once it is over. A call nobody spoke on is
+        // reported as that rather than as whatever screening mode it opened in,
+        // which would read as a conversation that never happened.
+        m.put("outcome.no_answer", pair("No answer", "কেউ কথা বলেনি"));
+        m.put("outcome.known_no_answer", pair("Known customer — no answer",
+                "পরিচিত গ্রাহক — কেউ কথা বলেনি"));
         m.put("call.not_recognised", pair("not recognised", "চেনা যায়নি"));
         m.put("call.still_running", pair("still running", "চলছে"));
 
@@ -257,6 +263,7 @@ final class LangPages {
         m.put("livecall.language", pair("Language", "ভাষা"));
         m.put("livecall.call_id", pair("Call id", "কল আইডি"));
         m.put("livecall.turns", pair("Turns", "পালা"));
+        m.put("livecall.duration", pair("Call length", "কলের দৈর্ঘ্য"));
         m.put("livecall.median_latency", pair("Median reply time", "গড় উত্তরের সময়"));
         m.put("livecall.model", pair("Answering model", "উত্তরদাতা মডেল"));
         m.put("livecall.dial_as", pair("Dial as", "যার হয়ে কল"));
@@ -298,8 +305,17 @@ final class LangPages {
                 "This browser cannot capture microphone audio.",
                 "এই ব্রাউজার মাইক্রোফোনের অডিও নিতে পারে না।"));
         m.put("livecall.twilio_disabled", pair(
-                "Add Twilio credentials in Settings to enable this (Phase 7).",
-                "এটি চালু করতে সেটিংসে টুইলিও ক্রেডেনশিয়াল দিন (ফেজ ৭)।"));
+                "Fill in the Twilio settings and the public media URL to enable this.",
+                "এটি চালু করতে টুইলিও সেটিংস ও পাবলিক মিডিয়া URL পূরণ করুন।"));
+        m.put("livecall.twilio_failed", pair(
+                "The telephone call could not be placed.",
+                "টেলিফোন কলটি করা যায়নি।"));
+        m.put("livecall.twilio_no_sdk", pair(
+                "Could not load the telephone library. Check the internet connection.",
+                "টেলিফোন লাইব্রেরিটি লোড করা যায়নি। ইন্টারনেট সংযোগ দেখুন।"));
+        m.put("livecall.twilio_unsupported", pair(
+                "This browser cannot place a telephone call.",
+                "এই ব্রাউজার টেলিফোন কল করতে পারে না।"));
         m.put("livecall.voice_down", pair(
                 "The voice server is not answering. Start it and try again.",
                 "ভয়েস সার্ভার সাড়া দিচ্ছে না। এটি চালু করে আবার চেষ্টা করুন।"));

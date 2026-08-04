@@ -14,7 +14,8 @@ import os
 from fastapi import FastAPI
 
 from config import JAVA_BASE_URL, fetch
-from transports import browser_ws
+from pipeline import voices as voice_catalogue
+from transports import browser_ws, twilio_ws
 
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO"),
@@ -24,6 +25,10 @@ log = logging.getLogger("voice")
 
 app = FastAPI(title="AI Customer Service Agent — voice server")
 app.include_router(browser_ws.router)
+# The telephone route is always mounted. It costs nothing when nobody calls it,
+# and a route that only exists once a credential is set is a route that is
+# never tested until the day it matters.
+app.include_router(twilio_ws.router)
 
 
 @app.on_event("startup")
@@ -34,7 +39,7 @@ async def announce() -> None:
 @app.on_event("shutdown")
 async def hang_up_everything() -> None:
     """End live calls tidily instead of leaving them half-open in Java."""
-    for session in list(browser_ws.SESSIONS.values()):
+    for session in list(_live_sessions().values()):
         await session.close("server_shutdown")
 
 
@@ -49,11 +54,36 @@ async def health() -> dict:
     google_ready = settings.google_credentials_available()
     return {
         "status": "up",
-        "activeCalls": len(browser_ws.SESSIONS),
+        "activeCalls": len(_live_sessions()),
         "stt": _resolve(settings.stt_provider, google_ready),
         "tts": _resolve(settings.tts_provider, google_ready),
         "googleCredentials": "present" if google_ready else "missing",
     }
+
+
+@app.get("/voices")
+async def voices() -> dict:
+    """Which voices the next call could actually use.
+
+    The panel shows these as a menu on the Settings page. Only this server can
+    answer it: the voices are whatever the operating system has installed, plus
+    whatever Google offers once its credentials are in place.
+    """
+    settings = fetch()
+    found = voice_catalogue.available(settings, refresh=True)
+    return {
+        "voices": found,
+        # Said plainly, because a machine with no Bangla voice is the normal
+        # state of a fresh Windows install and it is the reason Bangla sounds
+        # wrong. The panel turns this into a sentence an operator can act on.
+        "speaks": sorted({voice["language"] for voice in found} & {"en", "bn"}),
+        "provider": "gcp" if settings.google_credentials_available() else "fallback",
+    }
+
+
+def _live_sessions() -> dict:
+    """Every call in progress, whichever way it arrived."""
+    return {**browser_ws.SESSIONS, **twilio_ws.SESSIONS}
 
 
 def _resolve(wanted: str, google_ready: bool) -> str:

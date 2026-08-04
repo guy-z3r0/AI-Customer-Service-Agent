@@ -16,6 +16,7 @@ import { api } from '../api.js';
 import { AgentPlayer } from '../audio/player.js';
 import { MicStream } from '../audio/mic_stream.js';
 import { button, dropdown, element, keyValueRow, tagBadge } from '../components.js';
+import { TwilioMode } from '../twilio_mode.js';
 import { Transcript } from './live_transcript.js';
 
 const MODE_HUES = {
@@ -26,12 +27,22 @@ const MODE_HUES = {
 };
 const MODES = ['NEW_CUSTOMER', 'EXISTING_CUSTOMER', 'WRONG_NUMBER', 'COMPLEX_REQUEST'];
 
+/** Which Lang line explains a failure the Twilio SDK reported. */
+const TWILIO_TROUBLE = {
+    sdk_unreachable: 'livecall.twilio_no_sdk',
+    sdk_incomplete: 'livecall.twilio_no_sdk',
+    twilio_unsupported: 'livecall.twilio_unsupported'
+};
+
 export async function renderLiveCall(host, ctx) {
     const call = new LiveCall(host, ctx);
     ctx.onLiveEvent((event) => call.onLiveEvent(event));
-    ctx.onLeave(() => call.hangUp('left_page'));
+    ctx.onLeave(() => { call.stopClock(); call.hangUp('left_page'); });
     await call.loadClients();
     call.draw();
+    // Asked after drawing, not before: whether the telephone is configured is
+    // a question for the backend, and the page should not wait on it to appear.
+    call.checkTwilio();
 }
 
 class LiveCall {
@@ -45,6 +56,16 @@ class LiveCall {
         this.socket = null;
         this.mic = null;
         this.player = null;
+        // The telephone half. Null until somebody places a call on it, and
+        // false until the backend has said it is configured at all.
+        this.twilio = null;
+        this.twilioReady = false;
+        // The call clock. It runs from the moment a call is placed until it
+        // ends, and then stops rather than resetting, so the length of the last
+        // call is still on screen afterwards.
+        this.startedAt = null;
+        this.endedAt = null;
+        this.ticker = null;
         this.state = 'idle';
         this.latencies = [];
         this.turns = 0;
@@ -74,9 +95,8 @@ class LiveCall {
 
         const actions = element('div', 'row');
         this.nodes.start = button(this.t['livecall.start'], 'primary', () => this.dial());
-        this.nodes.twilio = button(this.t['livecall.start_twilio'], 'secondary', () => {});
-        this.nodes.twilio.disabled = true;
-        this.nodes.twilio.title = this.t['livecall.twilio_disabled'];
+        this.nodes.twilio = button(this.t['livecall.start_twilio'], 'secondary',
+            () => this.dialTwilio());
         this.nodes.end = button(this.t['livecall.end'], 'destructive', () => this.hangUp('hangup'));
         actions.append(this.nodes.start, this.nodes.twilio, this.nodes.end);
         panel.appendChild(actions);
@@ -110,8 +130,32 @@ class LiveCall {
         keyValueRow(grid, this.t['livecall.mode'], this.modeBadge());
         keyValueRow(grid, this.t['livecall.override_mode'], this.modeChooser());
         keyValueRow(grid, this.t['livecall.call_id'], this.callId || '—');
+        keyValueRow(grid, this.t['livecall.duration'], this.elapsed());
         keyValueRow(grid, this.t['livecall.turns'], String(this.turns));
         keyValueRow(grid, this.t['livecall.median_latency'], this.medianLatency());
+    }
+
+    /** How long the call has been running, as m:ss. */
+    elapsed() {
+        if (!this.startedAt) return '—';
+        const seconds = Math.floor(((this.endedAt || Date.now()) - this.startedAt) / 1000);
+        return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+    }
+
+    /**
+     * Redraws the facts once a second while a call is up, so the timer moves.
+     *
+     * The whole grid is cheap to rebuild and there is exactly one of it, which
+     * is a better trade than holding a reference to one cell and keeping it in
+     * step with everything else that can change it.
+     */
+    startClock() {
+        this.stopClock();
+        this.ticker = setInterval(() => this.refreshFacts(), 1000);
+    }
+
+    stopClock() {
+        if (this.ticker) { clearInterval(this.ticker); this.ticker = null; }
     }
 
     /** The active business's customers, so a call can be placed as one of them. */
@@ -177,6 +221,16 @@ class LiveCall {
     refreshButtons() {
         this.nodes.start.disabled = this.isLive();
         this.nodes.end.disabled = !this.isLive();
+        // A button that is off says why it is off. Until the Twilio settings
+        // are real there is nothing to press and nothing to explain afterwards.
+        this.nodes.twilio.disabled = this.isLive() || !this.twilioReady;
+        this.nodes.twilio.title = this.twilioReady ? '' : this.t['livecall.twilio_disabled'];
+    }
+
+    /** Asks the backend whether a telephone call is possible at all. */
+    async checkTwilio() {
+        this.twilioReady = await TwilioMode.isConfigured();
+        this.refreshButtons();
     }
 
     setState(state) {
@@ -198,11 +252,7 @@ class LiveCall {
         }
 
         this.setState('connecting');
-        this.latencies = [];
-        this.turns = 0;
-        this.mode = MODES[0];
-        this.language = 'EN';
-        this.caller = null;
+        this.resetCallFacts();
 
         let started;
         try {
@@ -226,6 +276,54 @@ class LiveCall {
             return;
         }
         this.setState('listening');
+    }
+
+    /**
+     * The same call, over a telephone line.
+     *
+     * Nothing about the conversation changes: the record is opened here exactly
+     * as it is for a browser call, and the transcript, screening and timings all
+     * arrive over the live feed as usual. What changes is who carries the
+     * audio — Twilio does, so this page opens no microphone and no voice socket.
+     */
+    async dialTwilio() {
+        this.setState('connecting');
+        this.resetCallFacts();
+
+        let started;
+        try {
+            started = await api.post('/api/call/start',
+                { telephony: 'twilio', clientCode: this.dialAs || null });
+        } catch (error) {
+            this.setState('idle');
+            this.ctx.toastError(error);
+            return;
+        }
+
+        this.callId = started.callId;
+        this.transcript.clear();
+        this.twilio = new TwilioMode();
+        try {
+            await this.twilio.dial(this.callId, (reason) => this.hangUp(reason));
+        } catch (error) {
+            const key = TWILIO_TROUBLE[error.message] || 'livecall.twilio_failed';
+            this.ctx.toast(this.t[key], 'bad');
+            await this.hangUp('twilio_setup_failed');
+            return;
+        }
+        this.setState('listening');
+    }
+
+    /** Clears what the last call left behind, before the next one starts. */
+    resetCallFacts() {
+        this.latencies = [];
+        this.turns = 0;
+        this.mode = MODES[0];
+        this.language = 'EN';
+        this.caller = null;
+        this.startedAt = Date.now();
+        this.endedAt = null;
+        this.startClock();
     }
 
     openVoiceSocket(started) {
@@ -300,6 +398,7 @@ class LiveCall {
         }
         if (this.mic) { this.mic.stop(); this.mic = null; }
         if (this.player) { this.player.stop(); this.player = null; }
+        if (this.twilio) { this.twilio.hangUp(); this.twilio = null; }
 
         if (wasLive && this.callId) {
             try {
@@ -310,6 +409,8 @@ class LiveCall {
                 console.warn('could not report the call end', error);
             }
         }
+        if (this.startedAt && !this.endedAt) this.endedAt = Date.now();
+        this.stopClock();
         if (this.nodes.start) this.setState('ended');
     }
 

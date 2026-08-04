@@ -3,16 +3,19 @@
 Target architecture (approved scope). Regenerated at every phase close; nodes not yet built
 are the plan, not the state — PROJECT_STATE.md says which phase is real.
 
-**Built as of Phase 6:** the Data layer (Postgres, Flyway, JPA repositories), every domain
-service — businesses, config, knowledge, customers, call logging, call history, summaries,
-email and metrics — the REST controllers over all of them, the whole voice path (browser
-microphone, transports, VAD, speech recognition and synthesis, the live event feed), the
-conversation itself (ConversationBrain, TurnRunner, PromptBuilder, the swappable LLM layer,
-the per-call turn websocket), the screening over it (CallModeMachine, seven tools, the
-bilingual greeting, InactivityWatchdog), what happens after it (PiiMasker, PostCallService,
-MailService), and the whole panel: Dashboard, Live Call, Businesses, the six-tab business
-editor, Clients, Call History and Settings.
-Still the plan: the Twilio transport and its controller, and the second seeded business.
+**Built as of Phase 7 — everything below is real.** The Data layer (Postgres, Flyway, JPA
+repositories), every domain service — businesses, config, knowledge, customers, call logging,
+call history, summaries, email and metrics — the REST controllers over all of them, both call
+transports (browser microphone and Twilio Media Streams) with VAD, speech recognition and
+synthesis behind them, the conversation itself (ConversationBrain, TurnRunner, PromptBuilder,
+the swappable LLM layer, the per-call turn websocket), the screening over it (CallModeMachine,
+seven tools, the bilingual greeting, InactivityWatchdog), what happens after it (PiiMasker,
+PostCallService, MailService), two seeded businesses in different trades, and the whole panel:
+Dashboard, Live Call, Businesses, the six-tab business editor, Clients, Call History and
+Settings.
+
+Nothing is left as plan. What is left is verification: `docs/ors/PROJECT_STATE.md` lists what
+has run against a live stack and what still needs a credential, a microphone or Docker.
 
 ```mermaid
 graph TD
@@ -386,6 +389,47 @@ Reading a call back is a different job from writing it down, and they are differ
 `CallLogService` writes and broadcasts while the call is live; `CallHistoryService` only reads,
 and has no live feed at all.
 
+## What Phase 7 added
+
+A call can arrive over a telephone, and a second business proves that onboarding is
+configuration.
+
+```
+ browser tab ──PCM16 16k──────────────────────────┐
+                                                  ├──▶ VoiceSession ──▶ the same brain
+ a telephone ──Twilio──▶ /ws/twilio ──mu-law 8k───┘      (telephony="browser"|"twilio")
+                            │  base64 in JSON, converted at this edge and nowhere else
+                            │
+   panel ──▶ /api/twilio/token ──▶ JWT signed with the API key secret (no SDK)
+   Twilio ─▶ /api/twilio/voice ──▶ <Connect><Stream url="wss://…/ws/twilio">
+                                     <Parameter name="callId"/>       ← ties audio to a record
+                                   or, unconfigured, <Say>…</Say><Hangup/>   never an HTTP error
+```
+
+| Layer | Built in Phase 7 |
+|---|---|
+| `api/` | `TwilioController` — the access token, minted by hand, and the TwiML that points Twilio's media stream at the voice server |
+| `python-voice/` | `transports/twilio_ws.py` — the Media Streams event protocol and the mu-law edge; `server.py` counts calls from both transports |
+| `static/js/` | `twilio_mode.js` — the SDK lazy-loaded from a pinned CDN URL, the device, and the tooltip when there is nothing to press |
+| `db/migration/` | `V4__seed_demo_two.sql` (Demo Courier), `V5` and `V6` correcting the model a clean install starts on |
+| fixes | `ClientService.sameNumber` (a masked number matched the first customer on the books), `SseChat` retrying a transient refusal, `CallLogService` recognising an inbound number |
+
+Three rules set here:
+
+- **The transport is the only thing that knows about telephones.** Audio is converted to
+  16 kHz PCM16 at the edge of `twilio_ws.py`, and nothing past it — session, brain, tools,
+  transcript — can tell which way the call arrived. That is what makes "the same brain" true
+  rather than aspirational.
+- **A caller on the line is never shown an error.** The TwiML endpoint answers 200 with a
+  spoken apology when the system is unconfigured, because an HTTP error would make Twilio play
+  its own recording to a stranger.
+- **A number with no digits matches nobody.** Masking sends `[MASKED_PHONE]` to the model, the
+  model passes it back into `lookup_client`, and a matching rule built on `endsWith` treated
+  that as matching everyone. Six digits minimum, on both sides.
+
+The model is now chosen by measurement: `gemini-3.1-flash-lite` answers in a median 800 ms
+against `gemini-3.6-flash`'s 3823 ms, and the whole turn budget is 2000 ms.
+
 ## Panel screens in contract parts
 
 Named in Nocturne vocabulary so screens are assembled, not invented: shell = `side-rail`
@@ -403,4 +447,6 @@ Dashboard = `stat-tile` strip (one accented number, the median reply time) + cap
 `list-row`s + a screening distribution of `list-row`s with `progress` bars in the data palette
 + recent-calls `table`. Call History = `table` of calls, and one call as `key-value` facts, a
 summary `panel`, the screening steps as `list-row`s and the transcript as a `scroll-region` of
-`list-row`s with role and timing `tag-badge`s.
+`list-row`s with role and timing `tag-badge`s. The Twilio dial is a secondary `button` beside
+the primary one, disabled with a tooltip until its credentials are real — the contract's own
+answer for an action that exists but cannot be taken yet.

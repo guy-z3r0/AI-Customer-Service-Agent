@@ -10,14 +10,9 @@
  */
 
 import { api } from '../api.js';
+import { modeBadge, outcomeBadge } from '../call_outcome.js';
 import { button, element, emptyState, keyValueRow, table, tagBadge } from '../components.js';
 
-const MODE_HUES = {
-    NEW_CUSTOMER: 'azure',
-    EXISTING_CUSTOMER: 'jade',
-    WRONG_NUMBER: 'rose',
-    COMPLEX_REQUEST: 'gold'
-};
 const ROLE_HUES = { CALLER: 'azure', AGENT: 'jade', SYSTEM: 'violet' };
 const GOOD_LATENCY_MS = 2000;
 
@@ -60,7 +55,7 @@ function listColumns(ctx) {
             label: t['history.col_caller'],
             value: (call) => call.caller || t['call.not_recognised']
         },
-        { label: t['history.col_mode'], render: (call) => modeBadge(call.mode, t) },
+        { label: t['history.col_mode'], render: (call) => outcomeBadge(call, t) },
         { label: t['history.col_turns'], numeric: true, value: (call) => call.turns },
         {
             label: t['history.col_length'],
@@ -107,7 +102,7 @@ function buildFacts(detail, t) {
     keyValueRow(grid, t['history.col_started'], shortTime(call.startedAt));
     keyValueRow(grid, t['history.col_business'], call.business);
     keyValueRow(grid, t['history.col_caller'], call.caller || t['call.not_recognised']);
-    keyValueRow(grid, t['history.col_mode'], modeBadge(call.mode, t));
+    keyValueRow(grid, t['history.col_mode'], outcomeBadge(call, t));
     keyValueRow(grid, t['livecall.language'], t[`language.${(call.language || 'EN').toLowerCase()}`]);
     keyValueRow(grid, t['history.col_turns'], call.turns);
     keyValueRow(grid, t['history.col_length'], call.durationSeconds == null
@@ -199,11 +194,6 @@ function buildTranscript(detail, t) {
 }
 
 // ------------------------------------------------------------- internals --
-
-function modeBadge(mode, t) {
-    if (!mode) return element('span', null, '');
-    return tagBadge(t[`mode.${mode.toLowerCase()}`] || mode, MODE_HUES[mode] || 'azure');
-}
 
 function shortTime(isoString) {
     const when = new Date(isoString);

@@ -24,7 +24,7 @@ import asyncio
 import logging
 import time
 
-from audio import BYTES_PER_MS
+from audio import BYTES_PER_MS, duration_ms as audio_duration_ms
 from config import fetch, fetch_strings
 from pipeline import providers
 from pipeline.vad import Endpointer
@@ -79,6 +79,9 @@ class VoiceSession:
         self._speaker = None
         self._reported = set()
         self._pending_hangup = None
+        # When the audio already handed to the transport will have finished
+        # being heard. Everything that means "the agent has stopped" waits for it.
+        self._speech_ends_at = 0.0
 
     # ------------------------------------------------------------ lifecycle --
 
@@ -317,6 +320,13 @@ class VoiceSession:
             await self._send_audio(pcm[offset:offset + CHUNK_BYTES])
             if not first_byte_at:
                 first_byte_at = time.time()
+
+        # Audio leaves here far faster than it is heard: a twelve-second
+        # greeting is handed to the socket in a few milliseconds and then plays
+        # out of a buffer at the other end. Book when it will actually finish,
+        # because that — not now — is when the caller can speak.
+        self._speech_ends_at = max(time.time(), self._speech_ends_at) + \
+            audio_duration_ms(pcm) / 1000.0
         await self._report_first_audio(item["seq"], first_byte_at)
 
     async def _report_first_audio(self, seq: int, when: float) -> None:
@@ -327,12 +337,30 @@ class VoiceSession:
         await self._tell_brain({"type": "spoken", "seq": seq, "tTtsFirst": _millis(when)})
 
     async def _end_of_turn(self) -> None:
+        """The agent has stopped talking — or rather, is about to.
+
+        Everything that marks the end of the agent's turn waits for the audio
+        to have played out: the microphone reopening, the brain's silence
+        clock, and the hangup that would otherwise cut a farewell off halfway.
+        Without the wait all three happen the instant the audio is queued,
+        which on a long greeting is a dozen seconds early.
+        """
+        await self._wait_for_the_voice_to_finish()
+
         self._agent_speaking = False
         await self._send_json({"type": "agent_state", "speaking": False})
         if self._endpointer is not None:
             self._endpointer.reset()
+        # The caller's silence starts now. Until this arrives the brain has no
+        # way of telling a quiet caller from one still listening to the agent.
+        await self._tell_brain({"type": "agent_done"})
         if self._pending_hangup:
             await self.close(self._pending_hangup)
+
+    async def _wait_for_the_voice_to_finish(self) -> None:
+        remaining = self._speech_ends_at - time.time()
+        if remaining > 0:
+            await asyncio.sleep(remaining)
 
     # ------------------------------------------------------------ internals --
 

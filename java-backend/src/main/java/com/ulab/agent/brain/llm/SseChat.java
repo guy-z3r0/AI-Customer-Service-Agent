@@ -8,6 +8,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
@@ -59,7 +60,7 @@ final class SseChat {
         try {
             run(factory.get(), out, reader);
         } catch (Exception first) {
-            if (out.spoke || first instanceof RejectedByProvider) {
+            if (out.spoke || !worthRetrying(first)) {
                 handler.onError(first);
                 return;
             }
@@ -101,10 +102,35 @@ final class SseChat {
         return detail.length() > 300 ? detail.substring(0, 300) : detail;
     }
 
+    /**
+     * Whether asking again could plausibly work.
+     *
+     * A refusal usually means a key, a model name or a payload the vendor will
+     * refuse just as firmly the second time. The exceptions are the ones that
+     * say "not now" rather than "no": a rate limit or an overloaded model, both
+     * of which are common enough on a free tier to be worth one more try.
+     * Everything that is not a refusal at all — a dropped connection, a
+     * timeout — was always worth retrying.
+     */
+    private static boolean worthRetrying(Exception failure) {
+        return !(failure instanceof RejectedByProvider refusal) || refusal.isTransient();
+    }
+
     /** An answer the vendor refused. Retrying a rejected key just fails twice. */
     static final class RejectedByProvider extends IOException {
+
+        /** Too many requests, and the four ways a server says it is struggling. */
+        private static final Set<Integer> TRANSIENT = Set.of(429, 500, 502, 503, 504);
+
+        private final int status;
+
         RejectedByProvider(int status, String detail) {
             super("the model service answered HTTP " + status + ": " + detail);
+            this.status = status;
+        }
+
+        boolean isTransient() {
+            return TRANSIENT.contains(status);
         }
     }
 

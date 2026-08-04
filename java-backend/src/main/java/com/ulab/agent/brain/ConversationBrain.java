@@ -204,6 +204,21 @@ public class ConversationBrain {
      * The summary and any escalation email happen on their own thread, because
      * the caller has already gone and nothing is waiting on them.
      */
+    /**
+     * The agent has finished speaking and the caller can talk.
+     *
+     * This is where a caller's silence begins. It cannot be measured from the
+     * moment a reply is sent — audio is handed to the transport in
+     * milliseconds and then plays for several seconds — so the voice server,
+     * which is the only part that knows how long its own audio lasts, says
+     * when. Without it a caller is asked whether they are still there while
+     * the greeting is still being read to them.
+     */
+    public void onAgentDone(UUID callId) {
+        CallSession session = registry.get(callId);
+        if (session != null) session.touch();
+    }
+
     public void onCallEnd(UUID callId, String reason) {
         registry.remove(callId);
         if (callLog.end(callId, reason)) postCall.onCallEnded(callId);

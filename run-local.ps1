@@ -55,15 +55,20 @@ Write-Host ""
 # Spring scans whatever is in target/: one orphan from an earlier layout is
 # enough to fail the boot with a NoSuchFieldError that points at nothing.
 # The windows are /k, not /c, so a crash stays on screen to be read.
+#
+# Every `set` here is written as set "NAME=value". Without the quotes cmd takes
+# the space before the && as part of the value, so JAVA_HOME ends in a space,
+# Maven looks for "…\jdk-21 \bin\java.exe" and reports that JAVA_HOME is not
+# defined correctly — while pointing at a path that looks perfectly right.
 Write-Host "Starting the backend and its database..." -ForegroundColor Cyan
 $backend = Start-Process -PassThru -FilePath "cmd.exe" -ArgumentList @(
-    "/k", "title AI Agent - backend && set JAVA_HOME=$jdk && mvn clean spring-boot:run -Dspring-boot.run.profiles=dev"
+    "/k", "title AI Agent - backend && set `"JAVA_HOME=$jdk`" && mvn clean spring-boot:run -Dspring-boot.run.profiles=dev"
 ) -WorkingDirectory (Join-Path $root "java-backend")
 
 # --- The voice server --------------------------------------------------------
 Write-Host "Starting the voice server..." -ForegroundColor Cyan
 $voice = Start-Process -PassThru -FilePath "cmd.exe" -ArgumentList @(
-    "/k", "title AI Agent - voice && set JAVA_BASE_URL=http://127.0.0.1:8080 && python -m uvicorn server:app --host 127.0.0.1 --port 8090"
+    "/k", "title AI Agent - voice && set `"JAVA_BASE_URL=http://127.0.0.1:8080`" && python -m uvicorn server:app --host 127.0.0.1 --port 8090"
 ) -WorkingDirectory (Join-Path $root "python-voice")
 
 # --- Wait for the panel, then open it ----------------------------------------

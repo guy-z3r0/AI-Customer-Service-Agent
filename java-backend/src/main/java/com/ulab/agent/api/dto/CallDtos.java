@@ -16,12 +16,16 @@ public final class CallDtos {
     }
 
     /**
-     * @param telephony  "browser" or "twilio"; anything else is treated as browser
-     * @param language   "en" or "bn"; null means whatever Settings says
-     * @param clientCode dial as a customer already on the records, so the call
-     *                   opens knowing who it is with; null for an unknown caller
+     * @param telephony    "browser" or "twilio"; anything else is treated as browser
+     * @param language     "en" or "bn"; null means whatever Settings says
+     * @param clientCode   dial as a customer already on the records, so the call
+     *                     opens knowing who it is with; null for an unknown caller
+     * @param callerNumber the number the call is coming from, which only a
+     *                     telephone knows. It is the other way a caller can be
+     *                     recognised before they have said anything.
      */
-    public record StartRequest(String telephony, String language, String clientCode) {
+    public record StartRequest(String telephony, String language, String clientCode,
+                               String callerNumber) {
     }
 
     /**
