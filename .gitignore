@@ -21,7 +21,10 @@ venv/
 Thumbs.db
 
 # --- App-generated ---
+# Runtime logs only. The phase logs and test scripts under docs/ors/logs/ are
+# part of the build record and belong in git — this pattern was swallowing them.
 logs/
+!docs/ors/logs/
 *.class
 *.lst
 java-backend/data/config.json

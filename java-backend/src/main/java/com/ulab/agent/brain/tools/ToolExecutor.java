@@ -2,6 +2,7 @@ package com.ulab.agent.brain.tools;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.ulab.agent.api.dto.CallDtos;
 import com.ulab.agent.api.dto.ClientDtos;
 import com.ulab.agent.brain.CallModeMachine;
 import com.ulab.agent.brain.CallSession;
@@ -58,6 +59,8 @@ public class ToolExecutor {
             case ToolRegistry.CREATE_CLIENT -> createClient(session, text(arguments, "name"),
                     text(arguments, "phone"), text(arguments, "request"));
             case ToolRegistry.LOG_REQUEST -> logRequest(session, text(arguments, "summary"));
+            case ToolRegistry.ESCALATE_TO_HUMAN -> escalate(session, text(arguments, "reason"),
+                    text(arguments, "details"));
             default -> refused("there is no action by that name");
         };
     }
@@ -149,6 +152,30 @@ public class ToolExecutor {
                     spoken(session, modes.farewellKey(mode)));
         }
         return result(true, "mode", mode.name(), "callIsEnding", ending);
+    }
+
+    /**
+     * Hands the call to a member of staff.
+     *
+     * The promise is kept by the mode rather than by this method: moving to
+     * COMPLEX_REQUEST is what makes the summary go out by email when the call
+     * ends, and the reason given here is what that email says. Details the
+     * caller gave go into the transcript as their own line, so they travel with
+     * the call whether it is read on screen or in the email.
+     */
+    private String escalate(CallSession session, String reason, String details) {
+        String why = reason == null || reason.isBlank() ? "the caller needs a person" : reason;
+        boolean alreadyHandedOver = session.mode() == CallMode.COMPLEX_REQUEST;
+
+        if (!alreadyHandedOver && modes.apply(session, CallMode.COMPLEX_REQUEST, why) == null) {
+            return refused(Lang.ERR_MODE_NOT_ALLOWED);
+        }
+        if (details != null && !details.isBlank()) {
+            callLog.record(session.callId(), CallDtos.LineToStore.system(
+                    details.trim(), session.language().code(), session.mode().name()));
+        }
+        return result(true, "mode", CallMode.COMPLEX_REQUEST.name(),
+                "alreadyHandedOver", alreadyHandedOver);
     }
 
     private String endCall(CallSession session, String reason) {

@@ -123,12 +123,43 @@ class ToolExecutorTest {
     void everyToolHasASchemaBothVendorsCanRead() {
         List<String> schemas = new ToolRegistry().schemas();
 
-        assertEquals(6, schemas.size());
+        assertEquals(7, schemas.size());
         schemas.forEach(schema -> {
             assertTrue(schema.contains("\"name\""));
             assertTrue(schema.contains("\"description\""));
             assertTrue(schema.contains("\"parameters\""));
         });
+    }
+
+    // ------------------------------------------------------------ escalation --
+
+    @Test
+    void handingACallToAPersonMovesItAndKeepsTheDetailsTheyWillNeed() {
+        TestCalls.Wiring wiring = TestCalls.wire(CallMode.NEW_CUSTOMER, Language.EN);
+
+        String result = wiring.executor().run(wiring.session(), ToolRegistry.ESCALATE_TO_HUMAN,
+                "{\"reason\":\"wants a refund we cannot approve\","
+                        + "\"details\":\"order 4471, call back after six\"}");
+
+        assertTrue(result.contains("\"ok\":true"));
+        assertEquals(CallMode.COMPLEX_REQUEST, wiring.session().mode());
+        assertFalse(wiring.session().isEnding(), "a promise of a person is not a goodbye");
+        assertEquals("wants a refund we cannot approve",
+                wiring.log().modeChanges.get(0).getReason());
+        assertEquals(List.of("order 4471, call back after six"),
+                wiring.log().lines.stream().map(line -> line.text()).toList());
+    }
+
+    @Test
+    void handingOverTwiceIsNotARefusal() {
+        TestCalls.Wiring wiring = TestCalls.wire(CallMode.COMPLEX_REQUEST, Language.EN);
+
+        String result = wiring.executor().run(wiring.session(), ToolRegistry.ESCALATE_TO_HUMAN,
+                "{\"reason\":\"still needs a person\"}");
+
+        assertTrue(result.contains("\"ok\":true"), "the promise was already made and still holds");
+        assertTrue(result.contains("\"alreadyHandedOver\":true"));
+        assertEquals(CallMode.COMPLEX_REQUEST, wiring.session().mode());
     }
 
     // -------------------------------------------------------------- customers --

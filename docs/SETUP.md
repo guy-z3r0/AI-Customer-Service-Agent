@@ -136,8 +136,14 @@ rougher but works with no account at all.
 ### Later: escalation email (Phase 6)
 
 `SMTP host`, `SMTP port`, `SMTP username`, `SMTP password`, `Send from address`.
-A Gmail account with an app password works. Until these are set, a call that
-needs a human is written to the log instead of emailed — nothing breaks.
+A Gmail account with an app password works, and so does a Mailtrap inbox if you
+would rather test without emailing anyone real. Use port **587**, not 465. Until
+these are set, a call that needs a human is written to the log instead of
+emailed — nothing breaks.
+
+**[KEYS_FOR_TESTING.md](KEYS_FOR_TESTING.md)** walks the speech and email
+credentials properly, with links and the path gotcha that catches people running
+without Docker.
 
 ### Later: Twilio (Phase 7, optional)
 

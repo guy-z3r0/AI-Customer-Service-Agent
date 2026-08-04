@@ -14,7 +14,9 @@ import com.ulab.agent.repo.AiSettingsRepository;
 import com.ulab.agent.repo.BusinessRepository;
 import com.ulab.agent.services.CallLogService;
 import com.ulab.agent.services.ClientService;
+import com.ulab.agent.services.PostCallService;
 import com.ulab.agent.utils.Lang;
+import com.ulab.agent.utils.PiiMasker;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,6 +72,7 @@ public class ConversationBrain {
     private final ToolRegistry tools;
     private final ToolExecutor toolExecutor;
     private final ClientService clients;
+    private final PostCallService postCall;
 
     private final ExecutorService turnWorkers = Executors.newVirtualThreadPerTaskExecutor();
     private final ScheduledExecutorService linkGrace = Executors.newSingleThreadScheduledExecutor();
@@ -78,8 +81,9 @@ public class ConversationBrain {
                              CallLogService callLog, BusinessRepository businesses,
                              AiSettingsRepository aiSettings, CallModeMachine modes,
                              ToolRegistry tools, ToolExecutor toolExecutor,
-                             ClientService clients) {
+                             ClientService clients, PostCallService postCall) {
         this.clients = clients;
+        this.postCall = postCall;
         this.registry = registry;
         this.prompts = prompts;
         this.router = router;
@@ -158,9 +162,7 @@ public class ConversationBrain {
 
         int turn = session.nextTurn();
         session.setBusy(true);
-        session.remember(CALLER, text);
-        callLog.record(callId, CallDtos.LineToStore.caller(text, session.language().code(),
-                session.mode().name(), turn, tSttFinal));
+        rememberWhatWasSaid(session, turn, text, tSttFinal);
 
         turnWorkers.submit(() -> new TurnRunner(this, session, turn, tSttFinal).run());
     }
@@ -175,9 +177,36 @@ public class ConversationBrain {
         if (messageSeq != null) callLog.stampTtsFirst(callId, messageSeq, turn, tTtsFirst);
     }
 
+    /**
+     * The transcript keeps what the caller actually said; the model is given a
+     * masked copy of it.
+     *
+     * Those are two different audiences. The operator watching the panel is
+     * supervising a call and has to see the ID number that was read out. The
+     * model does not need it — it has the customer's record already — and
+     * whatever goes into its history goes on to a vendor's servers, into the
+     * written summary, and out again in an email.
+     */
+    private void rememberWhatWasSaid(CallSession session, int turn, String text, long tSttFinal) {
+        String forTheModel = PiiMasker.mask(text);
+        if (!forTheModel.equals(text)) {
+            log.info("[{}] turn {} had personal details in it; the model was given the masked "
+                    + "version", session.callId(), turn);
+        }
+
+        session.remember(CALLER, forTheModel);
+        callLog.record(session.callId(), CallDtos.LineToStore.caller(text,
+                session.language().code(), session.mode().name(), turn, tSttFinal));
+    }
+
+    /**
+     * Ends the call, and — for the first end only — sets the write-up going.
+     * The summary and any escalation email happen on their own thread, because
+     * the caller has already gone and nothing is waiting on them.
+     */
     public void onCallEnd(UUID callId, String reason) {
         registry.remove(callId);
-        callLog.end(callId, reason);
+        if (callLog.end(callId, reason)) postCall.onCallEnded(callId);
     }
 
     /**

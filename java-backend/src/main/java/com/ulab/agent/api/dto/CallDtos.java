@@ -2,6 +2,8 @@ package com.ulab.agent.api.dto;
 
 import jakarta.validation.constraints.NotBlank;
 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -55,6 +57,11 @@ public final class CallDtos {
             return new LineToStore("agent", text, language, mode, turnSeq,
                     tSttFinal, tLlmFirst, tTtsFirst);
         }
+
+        /** Something that happened on the call rather than something said on it. */
+        public static LineToStore system(String text, String language, String mode) {
+            return new LineToStore("system", text, language, mode, 0, null, null, null);
+        }
     }
 
     /**
@@ -67,5 +74,43 @@ public final class CallDtos {
     }
 
     public record EndRequest(String reason) {
+    }
+
+    // ------------------------------------------------------ reading it back --
+
+    /**
+     * One call as a row in a table — on the history page and on the dashboard,
+     * which want exactly the same six facts about it.
+     *
+     * @param durationSeconds null while the call is still running
+     * @param caller          the customer's name, or null if nobody was recognised
+     * @param summarised      whether a written summary exists for it yet
+     */
+    public record CallListItem(UUID id, String business, String startedAt, Long durationSeconds,
+                               String mode, String language, String telephony, long turns,
+                               String caller, boolean summarised) {
+    }
+
+    /**
+     * One line of a finished call.
+     *
+     * @param replyMs how long the caller waited for this line, for an agent line
+     *                whose turn was fully timed; null for everything else
+     */
+    public record TranscriptLine(int seq, String role, String text, String language,
+                                 String mode, Long replyMs) {
+    }
+
+    public record TransitionView(String fromMode, String toMode, String reason, String at) {
+    }
+
+    /** @param structured the model's own fields — caller, intent, outcome, mode path */
+    public record SummaryView(String text, Map<String, String> structured,
+                              List<String> actionItems, String generatedAt) {
+    }
+
+    public record CallDetail(CallListItem call, String terminationReason,
+                             List<TranscriptLine> lines, List<TransitionView> transitions,
+                             SummaryView summary) {
     }
 }

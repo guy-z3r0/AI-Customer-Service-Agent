@@ -3,15 +3,16 @@
 Target architecture (approved scope). Regenerated at every phase close; nodes not yet built
 are the plan, not the state — PROJECT_STATE.md says which phase is real.
 
-**Built as of Phase 5:** the Data layer (Postgres, Flyway, JPA repositories), every domain
-service — businesses, config, knowledge, customers and call logging — the REST controllers over
-all of them, the whole voice path (browser microphone, transports, VAD, speech recognition and
-synthesis, the live event feed), the conversation itself (ConversationBrain, TurnRunner,
-PromptBuilder, the swappable LLM layer, the per-call turn websocket), the screening over it
-(CallModeMachine, six tools, the bilingual greeting, InactivityWatchdog), and the panel that
-edits all of it: Businesses, the six-tab business editor, Clients, Live Call and Settings.
-Still the plan: PostCallService, MailService, PiiMasker, MetricsService, the Dashboard and Call
-History pages, and the Twilio transport.
+**Built as of Phase 6:** the Data layer (Postgres, Flyway, JPA repositories), every domain
+service — businesses, config, knowledge, customers, call logging, call history, summaries,
+email and metrics — the REST controllers over all of them, the whole voice path (browser
+microphone, transports, VAD, speech recognition and synthesis, the live event feed), the
+conversation itself (ConversationBrain, TurnRunner, PromptBuilder, the swappable LLM layer,
+the per-call turn websocket), the screening over it (CallModeMachine, seven tools, the
+bilingual greeting, InactivityWatchdog), what happens after it (PiiMasker, PostCallService,
+MailService), and the whole panel: Dashboard, Live Call, Businesses, the six-tab business
+editor, Clients, Call History and Settings.
+Still the plan: the Twilio transport and its controller, and the second seeded business.
 
 ```mermaid
 graph TD
@@ -335,6 +336,56 @@ Writing a customer down does not make them a known customer *on that call*: they
 stranger when they rang, and the transcript should say so. Only `lookup_client` promotes a call
 to EXISTING_CUSTOMER.
 
+## What Phase 6 added
+
+A call is no longer over when the caller hangs up.
+
+```
+ caller says                                    what is kept                what is sent
+ "my NID is 1990123456789"
+        │
+        ├──▶ call_message.text ──────────────▶ the real words          (panel, history, download)
+        │
+        └──▶ PiiMasker.mask ──▶ "[MASKED_NID]" ──▶ CallSession history ──▶ the model
+                                                └──▶ PostCallService ──┬──▶ summary
+                                                                       └──▶ escalation email
+
+ hangup ──▶ CallLogService.end ──true, once──▶ PostCallService  (own thread; nobody is waiting)
+                                                  ├─ LlmRouter ──▶ {summary_text, structured, action_items}
+                                                  ├─ mode_path ◀── mode_transition rows, not the model
+                                                  ├─ call_summary row              every call, always
+                                                  └─ COMPLEX_REQUEST? ──▶ MailService ──▶ SMTP
+                                                                                     └──▶ the log, in full,
+                                                                                          when unconfigured
+```
+
+| Layer | Built in Phase 6 |
+|---|---|
+| `utils/` | `PiiMasker` — national IDs, phones, emails and amounts, in both scripts; `LangPages`, the per-page half of the catalogue after it outgrew one file |
+| `services/` | `PostCallService` (the write-up and the handoff), `MailService` (SMTP from settings, or the log), `CallHistoryService` (reading a finished call back), `MetricsService` (percentiles and the distribution) |
+| `api/` | `CallHistoryController` — `GET /api/calls`, `/api/calls/{id}`, `/api/calls/{id}/export`; the history shapes in `CallDtos` |
+| `brain/tools/` | `escalate_to_human` — seven tools now |
+| `static/js/` | `history.js` (the list and one call in full), the finished `dashboard.js`, and the contract's `progress` part in `parts.css` |
+
+Four rules set here that Phase 7 inherits:
+
+- **Masking is about what leaves the building.** The transcript keeps what was said, because
+  the operator watching a call is supervising it. The model, the summary and the email get the
+  masked copy. A number the masker cannot account for — an order number, a year, a date — is
+  left alone, because a model that can see no numbers cannot answer the question it was asked.
+- **The write-up reads the database, not a session.** Nothing is carried in memory between the
+  hangup and the email. A call whose record says a person was promised is a call that gets one,
+  whatever happened to the process in between.
+- **Every call gets a summary, including the ones no model saw.** No key, no answer, unreadable
+  JSON — each ends with a summary row saying so in the call's own language. That is what makes
+  "written up" a column worth trusting.
+- **What the app already knows, it does not ask the model.** `mode_path` is assembled from the
+  call's own transitions. Asking for it would be inviting a guess about a fact on file.
+
+Reading a call back is a different job from writing it down, and they are different classes:
+`CallLogService` writes and broadcasts while the call is live; `CallHistoryService` only reads,
+and has no live feed at all.
+
 ## Panel screens in contract parts
 
 Named in Nocturne vocabulary so screens are assembled, not invented: shell = `side-rail`
@@ -348,5 +399,8 @@ or refuses an override. Businesses = `table` + `dialog` forms + `destructive-con
 opening a `tab-strip` editor (About / Services / Policies / Questions / Persona / Hours &
 handover) with `inline-error` validation and `toast` saves. Clients = `table` + `dialog` forms,
 with a `tag-badge` where a contact detail cannot be decrypted. Settings = `key-value` forms.
-Dashboard = `stat-tile` strip + recent-calls `table`; Call History = `table` + detail `panel`
-— both still the plan.
+Dashboard = `stat-tile` strip (one accented number, the median reply time) + capability
+`list-row`s + a screening distribution of `list-row`s with `progress` bars in the data palette
++ recent-calls `table`. Call History = `table` of calls, and one call as `key-value` facts, a
+summary `panel`, the screening steps as `list-row`s and the transcript as a `scroll-region` of
+`list-row`s with role and timing `tag-badge`s.

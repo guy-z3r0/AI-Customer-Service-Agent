@@ -190,10 +190,20 @@ public class CallLogService {
                 "language", language.name()));
     }
 
+    /**
+     * Closes the call.
+     *
+     * Both the panel's hang-up button and the voice server report the end, so
+     * this is often called twice for one call. That is not an error, but only
+     * the first of them is the moment the call ended — and only that one may
+     * set the write-up and the escalation email going.
+     *
+     * @return true when this call is what closed the record
+     */
     @Transactional
-    public void end(UUID callId, String reason) {
+    public boolean end(UUID callId, String reason) {
         CallRecord call = require(callId);
-        if (call.getEndedAt() != null) return;  // hanging up twice is not an error
+        if (call.getEndedAt() != null) return false;
 
         call.setEndedAt(Instant.now());
         call.setTerminationReason(reason == null || reason.isBlank() ? "hangup" : reason);
@@ -202,6 +212,7 @@ public class CallLogService {
         log.info("Call {} ended ({})", callId, call.getTerminationReason());
         liveEvents.broadcast("call_ended", event("callId", callId,
                 "reason", call.getTerminationReason()));
+        return true;
     }
 
     // ------------------------------------------------------------ internals --

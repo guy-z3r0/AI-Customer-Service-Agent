@@ -63,6 +63,9 @@ public final class Prompts {
             - lookup_client, when the caller gives a customer code or a number to check.
             - create_client, once a caller who is not on the records gives you a name and a number.
             - log_request, to note on their record what this call was about.
+            - escalate_to_human, when this needs a member of staff: a refund or a discount you
+              cannot approve, a complaint, a legal question, or a caller who asks for a person.
+              Say that a colleague will follow it up. Do not promise when, and do not hang up.
             - set_language, when the caller asks for the other language or is plainly speaking it.
             - set_mode, when the situation on this call has changed to one of the listed kinds.
               Give a short plain reason. Use it once, when you are sure, not to hedge.
@@ -86,6 +89,36 @@ public final class Prompts {
     public static final String CONTACT = "Contact and location:";
     public static final String HOURS = "Opening hours (%s):";
     public static final String CLOSED = "closed";
+
+    // ------------------------------------------------ after the call is over --
+
+    public static final String SUMMARY_ROLE =
+            "You are reading the transcript of a telephone call that has just ended, so that a "
+                    + "colleague who was not on it can catch up in ten seconds.";
+
+    /**
+     * Asking for JSON in prose rather than through a tool schema, because this
+     * request is made of the same two providers as the conversation and only one
+     * of them enforces a response shape. What both of them do reliably is copy
+     * an example, so the example is the instruction.
+     */
+    public static final String SUMMARY_REQUEST = """
+            Reply with JSON and nothing else. No code fence, no sentence before or after it.
+            Use exactly this shape:
+            {
+              "summary_text": "two or three sentences saying what the caller wanted and what happened",
+              "structured": {
+                "caller": "who was calling, or unknown",
+                "intent": "what they wanted, in a few words",
+                "outcome": "how the call ended",
+                "sentiment": "calm, unhappy or angry"
+              },
+              "action_items": ["one short task each; an empty list when there is nothing to do"]
+            }
+            Personal details have already been replaced with [MASKED_...] markers. Leave those
+            markers exactly as they are and never guess what was behind one.""";
+
+    public static final String TRANSCRIPT = "The call, line by line:";
 
     public static final String NO_KNOWLEDGE =
             "This business has not filled in its knowledge base yet. Say that you cannot answer "

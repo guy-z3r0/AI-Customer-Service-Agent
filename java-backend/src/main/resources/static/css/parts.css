@@ -291,6 +291,30 @@ html, body {
     margin-top: var(--s4);
 }
 
+/* The contract's determinate progress bar. It is used here as a one-row chart,
+   which is why the fill takes a data-palette colour rather than the accent —
+   the accent is spoken for, and a distribution is a chart. */
+.progress {
+    flex: 1;
+    height: var(--s1);
+    min-width: var(--s9);
+    border-radius: var(--r-pill);
+    background: var(--surface-raised);
+    overflow: hidden;
+}
+
+.progress__fill {
+    height: 100%;
+    border-radius: var(--r-pill);
+    background: var(--accent);
+}
+
+.progress__fill--azure { background: var(--data-azure); }
+.progress__fill--gold { background: var(--data-gold); }
+.progress__fill--jade { background: var(--data-jade); }
+.progress__fill--rose { background: var(--data-rose); }
+.progress__fill--violet { background: var(--data-violet); }
+
 .list-row {
     display: flex;
     align-items: center;

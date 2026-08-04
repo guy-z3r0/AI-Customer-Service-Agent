@@ -1,9 +1,9 @@
 package com.ulab.agent.services;
 
 import com.ulab.agent.api.dto.MetricsDtos;
-import com.ulab.agent.domain.Business;
 import com.ulab.agent.domain.CallMessage;
 import com.ulab.agent.domain.CallRecord;
+import com.ulab.agent.domain.enums.CallMode;
 import com.ulab.agent.repo.BusinessRepository;
 import com.ulab.agent.repo.CallMessageRepository;
 import com.ulab.agent.repo.CallRecordRepository;
@@ -16,10 +16,10 @@ import java.io.File;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Comparator;
+import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -36,21 +36,27 @@ public class MetricsService {
     /** Under this and the reply felt immediate; the objective in the proposal. */
     public static final long LATENCY_TARGET_MS = 2000;
 
+    /** The dashboard shows this many of the newest calls. */
+    private static final int RECENT_CALLS = 10;
+
     private final BusinessRepository businesses;
     private final KbEntryRepository kbEntries;
     private final ClientRepository clients;
     private final CallRecordRepository calls;
     private final CallMessageRepository messages;
+    private final CallHistoryService history;
     private final ConfigService config;
 
     public MetricsService(BusinessRepository businesses, KbEntryRepository kbEntries,
                           ClientRepository clients, CallRecordRepository calls,
-                          CallMessageRepository messages, ConfigService config) {
+                          CallMessageRepository messages, CallHistoryService history,
+                          ConfigService config) {
         this.businesses = businesses;
         this.kbEntries = kbEntries;
         this.clients = clients;
         this.calls = calls;
         this.messages = messages;
+        this.history = history;
         this.config = config;
     }
 
@@ -58,6 +64,7 @@ public class MetricsService {
     public MetricsDtos.Summary summary(String voiceServerState) {
         List<CallRecord> allCalls = calls.findAll();
         Instant midnight = Instant.now().truncatedTo(ChronoUnit.DAYS);
+        List<Long> replies = replyTimes();
 
         return new MetricsDtos.Summary(
                 businesses.count(),
@@ -65,28 +72,52 @@ public class MetricsService {
                 clients.count(),
                 allCalls.size(),
                 allCalls.stream().filter(call -> call.getStartedAt().isAfter(midnight)).count(),
-                medianReplyMs(),
+                percentile(replies, 50),
+                percentile(replies, 90),
                 capabilities(voiceServerState),
-                recentCalls(allCalls));
+                modeCounts(allCalls),
+                history.list(null, RECENT_CALLS));
     }
 
-    /**
-     * The middle reply time across every turn ever taken. The median rather
-     * than the mean, because one call that stalled on a cold connection should
-     * not be able to make a hundred fast ones look slow.
-     */
-    private Long medianReplyMs() {
-        List<Long> replies = messages.findAll().stream()
+    /** Every turn's reply time, oldest to slowest, ready to be cut at a rank. */
+    private List<Long> replyTimes() {
+        return messages.findAll().stream()
                 .map(MetricsService::replyMillis)
                 .filter(ms -> ms != null && ms >= 0)
                 .sorted()
                 .toList();
-        if (replies.isEmpty()) return null;
+    }
 
-        int middle = replies.size() / 2;
-        return replies.size() % 2 == 1
-                ? replies.get(middle)
-                : (replies.get(middle - 1) + replies.get(middle)) / 2;
+    /**
+     * Percentiles rather than an average, because one call that stalled on a
+     * cold connection should not be allowed to make a hundred fast ones look
+     * slow. The median says what a caller usually waits; the 90th says what the
+     * unlucky one in ten waited, which is the number that decides whether the
+     * system is really under two seconds or only mostly.
+     */
+    private static Long percentile(List<Long> sorted, int percent) {
+        if (sorted.isEmpty()) return null;
+
+        int rank = (int) Math.ceil(sorted.size() * percent / 100.0) - 1;
+        return sorted.get(Math.clamp(rank, 0, sorted.size() - 1));
+    }
+
+    /**
+     * How calls have ended up, across all four kinds.
+     *
+     * A call that was never reclassified has no final mode on its row, and it
+     * is counted as what it opened as: a new caller. Leaving those out would
+     * make the ordinary call — the one that simply worked — the one kind the
+     * dashboard never showed.
+     */
+    private static List<MetricsDtos.ModeCount> modeCounts(List<CallRecord> allCalls) {
+        Map<CallMode, Long> counted = allCalls.stream().collect(Collectors.groupingBy(
+                call -> call.getFinalMode() == null ? CallMode.NEW_CUSTOMER : call.getFinalMode(),
+                () -> new EnumMap<>(CallMode.class), Collectors.counting()));
+
+        return Arrays.stream(CallMode.values())
+                .map(mode -> new MetricsDtos.ModeCount(mode.name(), counted.getOrDefault(mode, 0L)))
+                .toList();
     }
 
     private static Long replyMillis(CallMessage message) {
@@ -135,28 +166,4 @@ public class MetricsService {
         return keyFile.isFile() && keyFile.length() > 0;
     }
 
-    private List<MetricsDtos.RecentCall> recentCalls(List<CallRecord> allCalls) {
-        List<CallRecord> newest = allCalls.stream()
-                .sorted(Comparator.comparing(CallRecord::getStartedAt).reversed())
-                .limit(10)
-                .toList();
-        if (newest.isEmpty()) return List.of();
-
-        Map<UUID, String> names = businesses.findAll().stream()
-                .collect(Collectors.toMap(Business::getId, Business::getName));
-
-        Map<UUID, Long> turnCounts = messages.findAll().stream()
-                .collect(Collectors.groupingBy(CallMessage::getCallId, Collectors.counting()));
-
-        return newest.stream().map(call -> new MetricsDtos.RecentCall(
-                call.getId(),
-                names.getOrDefault(call.getBusinessId(), ""),
-                call.getStartedAt().toString(),
-                call.getEndedAt() == null ? null
-                        : Duration.between(call.getStartedAt(), call.getEndedAt()).toSeconds(),
-                call.getFinalMode() == null ? null : call.getFinalMode().name(),
-                call.getFinalLanguage() == null ? null : call.getFinalLanguage().name(),
-                call.getTelephony().name(),
-                turnCounts.getOrDefault(call.getId(), 0L))).toList();
-    }
 }

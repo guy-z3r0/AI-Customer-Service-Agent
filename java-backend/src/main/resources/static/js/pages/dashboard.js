@@ -15,13 +15,27 @@ import { button, element, table, tagBadge } from '../components.js';
 const LATENCY_TARGET_MS = 2000;
 
 const STATE_HUE = { ready: 'jade', degraded: 'gold', off: 'rose' };
-const HINT_FOR = { model: 'dash.hint.model', speech: 'dash.hint.speech' };
+const HINT_FOR = {
+    voice: 'dash.hint.voice',
+    model: 'dash.hint.model',
+    speech: 'dash.hint.speech'
+};
 const OPTIONAL = ['telephony', 'email'];
+
+// The same colour for a screening mode wherever it appears — here, on the live
+// call and in the history — so the four kinds of call are learned once.
+const MODE_HUE = {
+    NEW_CUSTOMER: 'azure',
+    EXISTING_CUSTOMER: 'jade',
+    WRONG_NUMBER: 'rose',
+    COMPLEX_REQUEST: 'gold'
+};
 
 export async function renderDashboard(host, ctx) {
     const summary = await api.get('/api/metrics/summary');
     host.appendChild(buildStats(summary, ctx));
     host.appendChild(buildCapabilities(summary, ctx));
+    host.appendChild(buildModes(summary, ctx));
     host.appendChild(buildRecentCalls(summary, ctx));
 }
 
@@ -40,7 +54,8 @@ function buildStats(summary, ctx) {
         statTile(t['dash.customers'], summary.customers),
         statTile(t['dash.calls_total'], summary.callsTotal),
         statTile(t['dash.calls_today'], summary.callsToday),
-        replyTile(summary, t)
+        replyTile(t['dash.median_reply'], summary.medianReplyMs, t, true),
+        replyTile(t['dash.slowest_tenth'], summary.slowestTenthReplyMs, t, false)
     );
     panel.appendChild(strip);
     return panel;
@@ -54,23 +69,70 @@ function statTile(label, value) {
 }
 
 /**
- * The one number on the screen allowed to use the accent colour: how long the
- * agent takes to answer. It is the objective the whole design is arranged
- * around, so it is the number that gets to stand out.
+ * How long the agent takes to answer: usually, and at its worst.
+ *
+ * Only the median may wear the accent — the contract allows exactly one
+ * accented number on a screen, and this is the objective the whole design is
+ * arranged around. It loses the accent the moment it goes over target, which is
+ * the only honest way to show a target.
+ *
+ * @param headline true for the one tile allowed to use the accent
  */
-function replyTile(summary, t) {
+function replyTile(label, milliseconds, t, headline) {
     const tile = element('div', 'stat-tile');
-    tile.appendChild(element('div', 'stat-tile__label', t['dash.median_reply']));
+    tile.appendChild(element('div', 'stat-tile__label', label));
 
-    if (summary.medianReplyMs == null) {
+    if (milliseconds == null) {
         tile.appendChild(element('div', 'stat-tile__value stat-tile__value--quiet',
             t['dash.no_calls_yet']));
         return tile;
     }
-    const value = element('div', 'stat-tile__value', `${summary.medianReplyMs} ms`);
-    if (summary.medianReplyMs <= LATENCY_TARGET_MS) value.classList.add('stat-tile__value--accent');
+    const value = element('div', 'stat-tile__value', `${milliseconds} ms`);
+    if (headline && milliseconds <= LATENCY_TARGET_MS) {
+        value.classList.add('stat-tile__value--accent');
+    }
     tile.appendChild(value);
     return tile;
+}
+
+// ------------------------------------------------------ how calls end up --
+
+/**
+ * The four kinds of call, and how many there have been of each.
+ *
+ * The bar is drawn as a share of the busiest kind rather than of the total, so
+ * that with three calls on the system the picture still says something.
+ */
+function buildModes(summary, ctx) {
+    const t = ctx.strings;
+    const panel = element('div', 'panel');
+    panel.appendChild(element('div', 'section-header', t['dash.modes']));
+
+    const busiest = Math.max(1, ...summary.modes.map((entry) => entry.calls));
+    const list = element('div');
+    summary.modes.forEach((entry) => {
+        const row = element('div', 'list-row');
+        row.appendChild(tagBadge(t[`mode.${entry.mode.toLowerCase()}`] || entry.mode,
+            MODE_HUE[entry.mode] || 'azure'));
+        row.appendChild(element('span', 'list-row__text', entry.calls));
+        row.appendChild(bar(entry.calls / busiest, MODE_HUE[entry.mode]));
+        list.appendChild(row);
+    });
+    panel.appendChild(list);
+    return panel;
+}
+
+/**
+ * One bar. The width is a measurement and is set here; the colour is not, and
+ * is chosen by class so that every colour on the panel still comes from the
+ * stylesheet.
+ */
+function bar(share, hue) {
+    const track = element('div', 'progress');
+    const fill = element('div', `progress__fill progress__fill--${hue || 'azure'}`);
+    fill.style.width = `${Math.round(share * 100)}%`;
+    track.appendChild(fill);
+    return track;
 }
 
 // --------------------------------------------------------- what works today --
@@ -120,7 +182,12 @@ function buildRecentCalls(summary, ctx) {
     panel.appendChild(table([
         { label: t['dash.col_started'], value: (call) => shortTime(call.startedAt) },
         { label: t['dash.col_business'], value: (call) => call.business },
-        { label: t['dash.col_mode'], value: (call) => readableMode(call.mode) },
+        {
+            label: t['dash.col_mode'],
+            render: (call) => call.mode
+                ? tagBadge(t[`mode.${call.mode.toLowerCase()}`], MODE_HUE[call.mode] || 'azure')
+                : element('span', null, '')
+        },
         { label: t['dash.col_turns'], numeric: true, value: (call) => call.turns },
         {
             label: t['dash.col_length'],
@@ -128,7 +195,12 @@ function buildRecentCalls(summary, ctx) {
             // A call still running has no end time, and the server leaves the
             // field out rather than sending a null — so == null, not === null.
             value: (call) => call.durationSeconds == null
-                ? t['dash.in_progress'] : `${call.durationSeconds}s`
+                ? t['call.still_running'] : `${call.durationSeconds}s`
+        },
+        {
+            label: t['businesses.col_actions'],
+            render: (call) => button(t['history.open'], 'ghost',
+                () => { window.location.hash = `#/history/${call.id}`; })
         }
     ], summary.recentCalls));
     return panel;
@@ -137,11 +209,4 @@ function buildRecentCalls(summary, ctx) {
 function shortTime(isoString) {
     const when = new Date(isoString);
     return Number.isNaN(when.getTime()) ? isoString : when.toLocaleString();
-}
-
-/** NEW_CUSTOMER reads better as "New customer" than as an enum name. */
-function readableMode(mode) {
-    if (!mode) return '';
-    const words = mode.toLowerCase().replace(/_/g, ' ');
-    return words.charAt(0).toUpperCase() + words.slice(1);
 }

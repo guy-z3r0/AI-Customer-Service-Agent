@@ -8,12 +8,13 @@
  */
 
 import { api } from './api.js';
-import { element, emptyState, toast, toastError } from './components.js';
+import { element, toast, toastError } from './components.js';
 import { connectLiveFeed } from './ws.js';
 import { renderBusinesses } from './pages/businesses.js';
 import { renderDashboard } from './pages/dashboard.js';
 import { renderBusinessEditor } from './pages/business_editor.js';
 import { renderClients } from './pages/clients.js';
+import { renderHistory } from './pages/history.js';
 import { renderLiveCall } from './pages/live_call.js';
 import { renderSettings } from './pages/settings.js';
 
@@ -24,7 +25,8 @@ const ROUTES = [
     { id: 'live_call', icon: '◉', render: renderLiveCall },
     { id: 'businesses', icon: '▤', render: renderBusinesses },
     { id: 'clients', icon: '◍', render: renderClients },
-    { id: 'history', icon: '◷', render: soonPage('soon.history') },
+    // One call is #/history/<id>; the rail only ever asks for the list.
+    { id: 'history', icon: '◷', render: renderHistory },
     { id: 'settings', icon: '⚙', render: renderSettings },
     // Reached from a business rather than from the rail, so it carries the id
     // it is editing in the hash: #/business_editor/<id>.
@@ -135,14 +137,6 @@ async function renderCurrentRoute() {
         context.toastError(error);
         host.replaceChildren(element('div', 'panel muted-body', shell.strings['error.load_failed']));
     }
-}
-
-/** Builds a page for a section that a later phase fills in. */
-function soonPage(stringKey) {
-    return (host, ctx) => {
-        host.appendChild(emptyState(ctx.strings[stringKey], ctx.strings['soon.action'],
-            () => ctx.goTo('businesses')));
-    };
 }
 
 // -------------------------------------------------------- active business --

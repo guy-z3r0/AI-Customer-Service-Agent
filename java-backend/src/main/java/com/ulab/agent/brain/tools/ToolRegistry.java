@@ -13,8 +13,8 @@ import java.util.List;
  * it, and a JSON Schema for its arguments — so the schema is written once here
  * and each provider only wraps it.
  *
- * Three actions exist so far. The ones that touch customer records and email
- * arrive with the services behind them.
+ * Seven actions: two that steer the call, one that ends it, three that touch
+ * the customer records, and one that hands the call to a person.
  */
 @Component
 public class ToolRegistry {
@@ -25,6 +25,7 @@ public class ToolRegistry {
     public static final String LOOKUP_CLIENT = "lookup_client";
     public static final String CREATE_CLIENT = "create_client";
     public static final String LOG_REQUEST = "log_request";
+    public static final String ESCALATE_TO_HUMAN = "escalate_to_human";
 
     private static final List<String> SCHEMAS = List.of(
             """
@@ -136,6 +137,29 @@ public class ToolRegistry {
                   }
                 },
                 "required": ["summary"]
+              }
+            }""",
+            """
+            {
+              "name": "escalate_to_human",
+              "description": "Hand this call to a member of staff, who is emailed a summary of \
+            it when the call ends. Use it for a refund or discount you cannot approve, a \
+            complaint, a legal question, or a caller who asks for a person. Stay on the line \
+            afterwards and take down whatever that person will need.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "description": "One short sentence saying why this needs a person"
+                  },
+                  "details": {
+                    "type": "string",
+                    "description": "Anything the caller gave that the colleague will need, such \
+            as an order number or when to call back"
+                  }
+                },
+                "required": ["reason"]
               }
             }""");
 

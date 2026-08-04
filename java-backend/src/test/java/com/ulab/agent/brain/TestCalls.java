@@ -1,5 +1,6 @@
 package com.ulab.agent.brain;
 
+import com.ulab.agent.api.dto.CallDtos;
 import com.ulab.agent.api.dto.ClientDtos;
 import com.ulab.agent.brain.llm.LlmRouter;
 import com.ulab.agent.brain.tools.ToolExecutor;
@@ -121,9 +122,16 @@ public final class TestCalls {
         public final List<ModeTransition> modeChanges = new ArrayList<>();
         public final List<Language> languageChanges = new ArrayList<>();
         public final List<String> identified = new ArrayList<>();
+        public final List<CallDtos.LineToStore> lines = new ArrayList<>();
 
         public Recorder() {
             super(null, null, null, null, null, null);
+        }
+
+        @Override
+        public int record(UUID callId, CallDtos.LineToStore line) {
+            lines.add(line);
+            return lines.size();
         }
 
         @Override
