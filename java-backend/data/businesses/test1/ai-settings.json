@@ -1,6 +1,0 @@
-{
-  "model": "gemini-2.5-flash",
-  "replyInstructions": "Reply politely and concisely. If you are unsure, ask a clarifying question.",
-  "roleInstructions": "You are a customer service agent. Assist customers with inquiries and provide accurate information.",
-  "organizationInfo": ""
-}

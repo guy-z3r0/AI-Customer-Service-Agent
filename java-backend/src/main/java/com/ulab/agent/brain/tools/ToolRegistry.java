@@ -87,19 +87,28 @@ public class ToolRegistry {
             """
             {
               "name": "lookup_client",
-              "description": "Look the caller up in the customer records, by the customer code \
-            they read out or by their phone number. Do this before saying anything about an \
-            order or a job already in progress.",
+              "description": "Check whether the caller is a customer on the records, before \
+            saying anything about an order or a job already in progress. Either give the full \
+            phone number they read out, or give their customer code together with the last \
+            four digits of the number we hold — a code on its own is not enough to identify \
+            anybody. This answers only yes or no; it never tells you their name.",
               "parameters": {
                 "type": "object",
                 "properties": {
                   "clientCode": {
                     "type": "string",
-                    "description": "The code the caller gave, such as C001"
+                    "description": "The code the caller gave, such as C001. Must be sent with \
+            phoneLastFour."
+                  },
+                  "phoneLastFour": {
+                    "type": "string",
+                    "description": "The last four digits of the phone number the caller says we \
+            have for them"
                   },
                   "phone": {
                     "type": "string",
-                    "description": "The number the caller gave, in any format"
+                    "description": "The caller's full phone number, in any format. Enough on \
+            its own."
                   }
                 }
               }

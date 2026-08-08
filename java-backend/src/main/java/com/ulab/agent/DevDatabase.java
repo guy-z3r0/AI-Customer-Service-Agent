@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -80,7 +81,10 @@ public class DevDatabase {
         try {
             String firstLine = Files.readAllLines(lock).stream().findFirst().orElse("").trim();
             long pid = Long.parseLong(firstLine);
-            ProcessHandle.of(pid).filter(ProcessHandle::isAlive).ifPresent(DevDatabase::stop);
+            ProcessHandle.of(pid)
+                    .filter(ProcessHandle::isAlive)
+                    .filter(candidate -> isTheServerThisFileNames(candidate, lock))
+                    .ifPresent(DevDatabase::stop);
             Files.deleteIfExists(lock);
             log.info("Cleared a lock file left behind by a previous run");
         } catch (IOException | NumberFormatException e) {
@@ -95,12 +99,56 @@ public class DevDatabase {
     }
 
     /**
+     * Whether the process holding this id really is the server that wrote the
+     * lock file.
+     *
+     * The comment here used to say the process was ours by construction. It is
+     * not: the id is read off a disk file that may be days old, and an id is
+     * reused as soon as the machine has got through the rest of them. After a
+     * reboot, or on a busy machine, that number names something else entirely —
+     * and on Windows a low one can name a system process. Two things have to
+     * agree before anything is killed: the process must be a postgres, and it
+     * must have started before the lock file was last written, because a
+     * process that started afterwards cannot be the one that wrote it.
+     */
+    static boolean isTheServerThisFileNames(ProcessHandle candidate, Path lock) {
+        return looksLikeAPostgres(candidate) && startedBeforeTheLockWasWritten(candidate, lock);
+    }
+
+    private static boolean looksLikeAPostgres(ProcessHandle candidate) {
+        String command = candidate.info().command().orElse("");
+        if (command.toLowerCase().contains("postgres")) return true;
+
+        log.warn("Process {} holds the lock file but is '{}', not a PostgreSQL — leaving it "
+                + "alone. Delete the lock file by hand if the database will not start.",
+                candidate.pid(), command.isEmpty() ? "unreadable" : command);
+        return false;
+    }
+
+    /**
+     * A process that started after the lock file was last written cannot be the
+     * process that wrote it — so it is somebody else wearing a reused id.
+     */
+    static boolean startedBeforeTheLockWasWritten(ProcessHandle candidate, Path lock) {
+        try {
+            Instant startedAt = candidate.info().startInstant().orElse(Instant.MIN);
+            if (!startedAt.isAfter(Files.getLastModifiedTime(lock).toInstant())) return true;
+
+            log.warn("Process {} started after {} was written, so it is not the server that "
+                    + "wrote it — leaving it alone.", candidate.pid(), lock);
+        } catch (IOException unreadable) {
+            log.warn("Could not read the age of {}, so process {} is being left alone: {}",
+                    lock, candidate.pid(), unreadable.toString());
+        }
+        return false;
+    }
+
+    /**
      * Stops the server still holding our data directory.
      *
-     * That process is ours by construction — its id came out of the lock file
-     * in a folder this class created. Killing the backend orphans it and it
-     * takes a few seconds to notice, so give it that long before insisting;
-     * without the wait, restarting twice quickly fails on a race.
+     * Killing the backend orphans it and it takes a few seconds to notice, so
+     * give it that long before insisting; without the wait, restarting twice
+     * quickly fails on a race.
      */
     private static void stop(ProcessHandle postgres) {
         log.info("Stopping a PostgreSQL left running by a previous run (process {})",

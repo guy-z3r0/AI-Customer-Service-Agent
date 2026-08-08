@@ -74,7 +74,7 @@ After that the project is built, and what is left is the definition-of-done sitt
 | Legacy import | ✓ |
 | Every phase has a log + test script | ✓ |
 | Twilio works, or is cleanly disabled | ✓ disabled path verified; **a real Twilio call has never been placed** |
-| `docker compose up` from a clean clone, health green | **never run** — every session used the dev profile |
+| `docker compose up` from a clean clone, health green | ✓ run 2026-08-05 — it did not work until two things were fixed, see SECURITY-AUDIT.md WARN-006 |
 | Browser call under 2 s median | needs Google speech + a microphone |
 | All four scenarios end to end | needs the same |
 | Bangla call in Bengali script | needs the same |
@@ -100,15 +100,22 @@ After that the project is built, and what is left is the definition-of-done sitt
 - **Twilio is built but unproven.** No account, no credentials, no ngrok here. The protocol
   handling, the token shape, the TwiML and every unconfigured path are tested; Twilio accepting
   the token and audio actually flowing are not.
-- Still never exercised: SMTP sending, Google Cloud speech, a microphone, Bangla end to end,
-  and `docker compose up`. Docker is installed and working on this machine — that one is worth
-  doing early, since it is the documented path a clean clone takes.
-- `spring.jpa.hibernate.ddl-auto` is still `none`. The schema has now booted many times; moving
-  it to `validate` would catch entity drift and is a safe next step.
-- **Running two backends at once will break the database.** `DevDatabase.clearStaleLock` stops
-  whatever process `postmaster.pid` names, so a second instance kills the first one's Postgres
-  and then fails to lock. Symptom: `could not lock .embedded-postgres\data\epg-lock` and a live
-  backend answering 500s. Fix: stop everything, delete `epg-lock`, start one.
+- Still never exercised: SMTP sending, Google Cloud speech, a microphone, and Bangla end to
+  end. `docker compose up` is now done — all three containers start, all eight migrations
+  apply, and both run as uid 10001 rather than root.
+- **The test suite had never actually run on this machine.** Mockito's Byte Buddy did not
+  understand Java 25's class files, so the fourteen login tests and both other security suites
+  errored before executing. `byte-buddy.version` is pinned to 1.18.0 and all 119 Java tests
+  now pass, alongside 32 Python.
+- `spring.jpa.hibernate.ddl-auto` is now `validate` (WARN-002). Flyway still owns the schema;
+  Hibernate checks it at boot and refuses to start if an entity has drifted from a migration.
+- **Running two backends at once still breaks the database, but for one reason now instead of
+  two.** `DevDatabase.clearStaleLock` no longer stops whatever process `postmaster.pid` happens
+  to name — it checks the process is a postgres and that it started before the file was written
+  (BUG-001). What remains is zonky's own `epg-lock`, which a second instance cannot take.
+  Symptom: `could not lock .embedded-postgres\data\epg-lock`. Fix: stop everything, then start
+  one. If a run is killed rather than stopped, its Postgres is orphaned and the next boot clears
+  it — or stop it by hand with `pg_ctl -D java-backend/.embedded-postgres/data -m fast stop`.
 - Files above BUILD_SPEC's list, each justified in its phase log: `brain/llm/SseChat.java`,
   `brain/SentenceSplitter.java`, `brain/TurnRunner.java`, `utils/Prompts.java`,
   `utils/LangPages.java`, `services/CallHistoryService.java`, `static/js/pages/live_transcript.js`,
@@ -118,10 +125,12 @@ After that the project is built, and what is left is the definition-of-done sitt
   a JWT signed with `javax.crypto`, and Media Streams is four JSON events. The browser SDK is
   pinned to `cdn.jsdelivr.net/npm/@twilio/voice-sdk@2.18.3`, verified by loading it in a
   browser; the `sdk.twilio.com` path most guides give does **not** resolve.
-- The string catalogue is 304 entries in both languages across `utils/Lang.java` and
+- The string catalogue is 312 entries in both languages across `utils/Lang.java` and
   `utils/LangPages.java`. The only entry without Bengali script is `settings.badge_placeholder`.
   **The Lang split still needs your decision** — it was Phase 6's open question and is unchanged.
-- **Nothing is committed.** Phases 5, 6 and 7 are uncommitted; the last commit is `a72a723`.
-  Each phase log ends with a commit message ready to use. The eleven earlier log and test-script
-  files are newly visible to git after Phase 6's `.gitignore` fix and go in with the next commit.
+- **Nothing is committed.** Phases 5, 6 and 7 are uncommitted, and so are three passes over
+  `SECURITY-AUDIT.md`; the last commit is `87883d5`. Each phase log ends with a commit message
+  ready to use. **Do not commit before reading SEC-001** — the two steps that need you are at
+  the top of the audit, and the pre-commit hook that stops a repeat is installed with
+  `git config core.hooksPath .githooks`.
 - User (Nanjiba) approves each phase before the next starts.

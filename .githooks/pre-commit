@@ -1,0 +1,74 @@
+#!/bin/sh
+#
+# Refuses a commit that carries a credential.
+#
+# This is the control that would have prevented SECURITY-AUDIT.md's first
+# finding: a live Google API key committed in the first commit and present in
+# every one after it, in a file .gitignore listed but git was already tracking.
+#
+# Install it once, per clone:
+#
+#     git config core.hooksPath .githooks
+#
+# It is a hook rather than something in CI because CI catches it after it has
+# been published, and a key that has been pushed has to be revoked whatever
+# happens next. Skip it with `git commit --no-verify` if you must, and know
+# that you have.
+
+set -e
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+# --- gitleaks, when it is installed -----------------------------------------
+# The real check. It knows the shape of a few hundred kinds of credential.
+if command -v gitleaks >/dev/null 2>&1; then
+    if ! gitleaks protect --staged --redact --no-banner; then
+        echo ""
+        echo "A credential was found in what you are about to commit. See above."
+        echo "Take it out, or use --no-verify if you are certain it is a sample."
+        exit 1
+    fi
+else
+    echo "pre-commit: gitleaks is not installed — falling back to a small"
+    echo "            pattern check. Install it for the real thing:"
+    echo "            https://github.com/gitleaks/gitleaks"
+fi
+
+# --- the fallback ------------------------------------------------------------
+# Deliberately narrow: the shapes this project actually handles, so it does not
+# cry wolf. It is a safety net under gitleaks, not a replacement for it.
+patterns='AIza[0-9A-Za-z_-]\{35\}\|sk-[A-Za-z0-9]\{32,\}\|SK[0-9a-f]\{32\}\|AC[0-9a-f]\{32\}\|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+
+found=0
+for file in $staged; do
+    [ -f "$file" ] || continue
+    if git show ":$file" | grep -q "$patterns"; then
+        echo "pre-commit: $file looks like it contains a credential."
+        found=1
+    fi
+done
+
+# The file that leaked the key the first time. It is untracked now and
+# gitignored, and it stays that way.
+for file in $staged; do
+    case "$file" in
+        java-backend/data/*|.env|secrets/*)
+            case "$file" in
+                *.PLACEHOLDER) ;;
+                *)
+                    echo "pre-commit: $file is not meant to be in git at all."
+                    found=1
+                    ;;
+            esac
+            ;;
+    esac
+done
+
+if [ "$found" -ne 0 ]; then
+    echo ""
+    echo "Nothing was committed. Use --no-verify only if you are certain."
+    exit 1
+fi
+
+exit 0

@@ -11,5 +11,16 @@ RUN mvn -B -q clean package -DskipTests
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /build/target/java-backend-2.0.0.jar app.jar
+
+# The jar is all this stage needs, and it needs no write access to it either.
+# logs/ is the one thing it does write: logback-spring.xml rolls a file there,
+# so the folder has to exist and belong to the user before it drops privileges.
+RUN groupadd --system --gid 10001 agent \
+    && useradd --system --uid 10001 --gid 10001 --no-create-home agent \
+    && chown 10001:10001 /app/app.jar \
+    && mkdir -p /app/logs \
+    && chown 10001:10001 /app/logs
+USER 10001
+
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

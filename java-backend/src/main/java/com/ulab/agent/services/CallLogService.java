@@ -24,7 +24,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -76,11 +75,17 @@ public class CallLogService {
         call.setBusinessId(business.getId());
         call.setTelephony(telephonyOf(request.telephony()));
         call.setFinalLanguage(Language.of(request.language()));
-        // Two ways a call can open already knowing who it is with: dialled as a
-        // known customer from the panel, or rung in from a number on the books.
-        // Neither is guaranteed, and a call that recognises nobody is normal.
+        // A call opens knowing who it is with only when the operator said so,
+        // by dialling as a customer from the panel. That is an authenticated
+        // choice made by a person looking at the record.
+        //
+        // A telephone number is not that. Caller ID is trivially spoofed, so an
+        // inbound number is a hint and nothing more: it is passed to the agent
+        // to look up and confirm during the call, and it does not by itself
+        // bind the call to somebody's record. Before this, ringing in with a
+        // forged caller ID was enough to be greeted by a customer's name and
+        // answered from their history.
         clients.byCode(business.getId(), request.clientCode())
-                .or(() -> clients.byPhone(business.getId(), request.callerNumber()))
                 .ifPresent(client -> call.setClientId(client.id()));
         calls.save(call);
 
@@ -128,9 +133,7 @@ public class CallLogService {
      */
     @Transactional
     public void stampTtsFirst(UUID callId, int messageSeq, int turnSeq, long epochMillis) {
-        CallMessage message = messages.findByCallIdOrderBySeqAsc(callId).stream()
-                .filter(candidate -> candidate.getSeq() == messageSeq)
-                .findFirst().orElse(null);
+        CallMessage message = messages.findByCallIdAndSeq(callId, messageSeq).orElse(null);
         if (message == null || message.getTTtsFirst() != null) return;
 
         message.setTTtsFirst(Instant.ofEpochMilli(epochMillis));
@@ -251,9 +254,18 @@ public class CallLogService {
         liveEvents.broadcast("latency", reading);
     }
 
+    /**
+     * The next free line number for a call.
+     *
+     * The call's own row is taken first, so two turns arriving together cannot
+     * both read the same highest number and both add one to it. Without the
+     * lock the unique constraint on (call_id, seq) caught the collision, but it
+     * caught it by failing the insert — one line of the transcript lost, and an
+     * exception in the middle of a live call.
+     */
     private int nextSeq(UUID callId) {
-        List<CallMessage> existing = messages.findByCallIdOrderBySeqAsc(callId);
-        return existing.isEmpty() ? 1 : existing.get(existing.size() - 1).getSeq() + 1;
+        calls.lockForNextSeq(callId);
+        return messages.highestSeq(callId) + 1;
     }
 
     private static Telephony telephonyOf(String raw) {

@@ -10,6 +10,7 @@ the Java backend, which each call reaches over its own websocket.
 
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
@@ -23,24 +24,28 @@ logging.basicConfig(
 )
 log = logging.getLogger("voice")
 
-app = FastAPI(title="AI Customer Service Agent — voice server")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Everything before the first request, and after the last one.
+
+    The two @app.on_event decorators this replaces have been deprecated since
+    FastAPI 0.93 and are scheduled for removal; one context manager is also a
+    plainer way of saying that the shutdown half is the startup half unwinding.
+    """
+    log.info("Voice server ready. Java backend at %s", JAVA_BASE_URL)
+    yield
+    # End live calls tidily instead of leaving them half-open in Java.
+    for session in list(_live_sessions().values()):
+        await session.close("server_shutdown")
+
+
+app = FastAPI(title="AI Customer Service Agent — voice server", lifespan=lifespan)
 app.include_router(browser_ws.router)
 # The telephone route is always mounted. It costs nothing when nobody calls it,
 # and a route that only exists once a credential is set is a route that is
 # never tested until the day it matters.
 app.include_router(twilio_ws.router)
-
-
-@app.on_event("startup")
-async def announce() -> None:
-    log.info("Voice server ready. Java backend at %s", JAVA_BASE_URL)
-
-
-@app.on_event("shutdown")
-async def hang_up_everything() -> None:
-    """End live calls tidily instead of leaving them half-open in Java."""
-    for session in list(_live_sessions().values()):
-        await session.close("server_shutdown")
 
 
 @app.get("/health")
@@ -70,7 +75,9 @@ async def voices() -> dict:
     whatever Google offers once its credentials are in place.
     """
     settings = fetch()
-    found = voice_catalogue.available(settings, refresh=True)
+    # Cached: building this list starts a speech engine, and the panel asks for
+    # it every time Settings is opened. Restart the voice server to rescan.
+    found = voice_catalogue.available(settings)
     return {
         "voices": found,
         # Said plainly, because a machine with no Bangla voice is the normal

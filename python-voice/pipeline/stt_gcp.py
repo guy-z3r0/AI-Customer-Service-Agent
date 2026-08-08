@@ -27,12 +27,46 @@ MODEL = "latest_short"
 STREAM_JOIN_TIMEOUT_S = 5
 _END_OF_AUDIO = object()
 
-# Asking Google to listen for a second language is what makes Banglish
-# transcribe at all, but it is not accepted with every model in every region.
-# The first refusal turns it off for the rest of the process rather than
-# letting every utterance fail the same way; the caller repeats that one
-# sentence and everything after it works.
-_ALTERNATES_ALLOWED = True
+# How long a refusal from Google keeps the second language switched off.
+# A refusal used to be permanent: one transient InvalidArgument and Banglish
+# stopped being recognised until somebody restarted the server. Ten minutes is
+# long enough that a caller does not repeat themselves over and over, and short
+# enough that a region or model that starts accepting it is picked up the same
+# afternoon.
+ALTERNATES_RETRY_AFTER_S = 600
+
+
+class _AlternateLanguages:
+    """Whether to ask Google to listen for a second language.
+
+    Asking is what makes Banglish transcribe at all, but it is not accepted with
+    every model in every region. The first refusal turns it off, the caller
+    repeats that one sentence, and everything after it works — until the cooling
+    -off period lapses and it is tried again.
+
+    Both methods are called from recogniser worker threads, so the flag is a
+    piece of shared state and is guarded like one.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._refused_at = None
+
+    def allowed(self) -> bool:
+        with self._lock:
+            if self._refused_at is None:
+                return True
+            if time.monotonic() - self._refused_at < ALTERNATES_RETRY_AFTER_S:
+                return False
+            self._refused_at = None
+            return True
+
+    def refused(self) -> None:
+        with self._lock:
+            self._refused_at = time.monotonic()
+
+
+ALTERNATES = _AlternateLanguages()
 
 
 class GoogleSttStream(SttStream):
@@ -76,17 +110,17 @@ class GoogleSttStream(SttStream):
     # --------------------------------------------------------- worker thread --
 
     def _run(self) -> None:
-        global _ALTERNATES_ALLOWED
-        listening_for_both = _ALTERNATES_ALLOWED
+        listening_for_both = ALTERNATES.allowed()
         try:
             for response in self._client.streaming_recognize(
                     self._stream_config(listening_for_both), self._requests()):
                 self._handle(response)
         except Exception as e:
             if listening_for_both and _refused_the_config(e):
-                _ALTERNATES_ALLOWED = False
+                ALTERNATES.refused()
                 log.warning("Google will not take a second language on %s here (%s) — "
-                            "listening for one language from now on", MODEL, e)
+                            "listening for one language for the next %d minutes",
+                            MODEL, e, ALTERNATES_RETRY_AFTER_S // 60)
             else:
                 log.warning("Google speech stream ended early: %s", e)
         finally:

@@ -7,14 +7,11 @@ import com.google.gson.JsonSyntaxException;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.File;
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 
 import org.slf4j.Logger;
@@ -25,9 +22,6 @@ import static com.ulab.agent.Main.GSON;
 public class FileUtils {
 
     private static final Logger log = LoggerFactory.getLogger(FileUtils.class);
-
-    private static final Path ERROR_LOG_DIRECTORY = Paths.get("logs", "errors");
-    private static final String ERROR_LOG_FILE_NAME = "error_{at}_{id}.log";
 
     // Creating a directory
     public static void createDirectory(Path directoryPath, boolean showInfo) {
@@ -195,50 +189,29 @@ public class FileUtils {
         return elementA.isJsonNull() && elementB.isJsonNull();
     }
 
-    // Catching errors
+    /**
+     * Writes a failure down, wherever this application's logs go.
+     *
+     * This used to open a file of its own under logs/errors/ and print the
+     * stack trace into it. Three things were wrong with that. The file was
+     * named from a count of the files already in the folder, so two threads
+     * failing at once wrote to the same name and one lost its trace. Nothing
+     * ever removed them, so the folder grew for as long as the app ran. And a
+     * stack trace out of the client queries carries SQL fragments and bound
+     * parameters, which is a thing to be careful where you put.
+     *
+     * Handing it to SLF4J solves all three at once: the rolling appender in
+     * logback-spring.xml caps the size and the number of files kept, one
+     * appender means no two writers race for a name, and there is a single
+     * place that decides where any of it is written.
+     *
+     * @param at where in the code this happened, in plain words
+     */
     public static void logError(Exception e) {
-        logError(ERROR_LOG_DIRECTORY, "undefined", e);
+        logError("undefined", e);
     }
 
     public static void logError(String at, Exception e) {
-        logError(ERROR_LOG_DIRECTORY, at, e);
-    }
-
-    public static void logError(Path exportPath, String at, Exception e) {
-        if (!Files.exists(exportPath)) {
-            try {
-                Files.createDirectories(exportPath);
-            } catch (IOException ignored) {
-            }
-        }
-        int id = getTotalFilesInDir(exportPath);
-        String fileName = ERROR_LOG_FILE_NAME.replace("{at}", at).replace("{id}", String.valueOf(id));
-        Path logFile = exportPath.resolve(fileName);
-        try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(logFile, StandardCharsets.UTF_8))) {
-            writer.println("========== ERROR LOG ==========");
-            writer.println("Timestamp: " + TimeUtils.getTimeNow());
-            writer.println("Location:  " + at);
-            writer.println("Error Msg: " + e.getMessage());
-            writer.println();
-            writer.println("--- Full Stack Trace ---");
-            e.printStackTrace(writer);
-            writer.println("===============================");
-
-            log.warn("Saved error log to: " + logFile.toAbsolutePath());
-        } catch (IOException writeEx) {
-            log.error("Failed to save error log.");
-            writeEx.printStackTrace();
-        }
-    }
-
-    private static int getTotalFilesInDir(Path location) {
-        if (!Files.exists(location)) return 1;
-        File[] files = location.toFile().listFiles();
-        if (files == null) return 1;
-        int count = 0;
-        for (File file : files) {
-            if (!file.isDirectory()) count++;
-        }
-        return count + 1;
+        log.error("Failed in {}: {}", at, e.toString(), e);
     }
 }

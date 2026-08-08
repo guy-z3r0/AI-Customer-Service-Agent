@@ -20,6 +20,7 @@ import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from session import VoiceSession
+from transports import guard
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +32,18 @@ SESSIONS: dict[str, VoiceSession] = {}
 
 @router.websocket("/ws/browser/{call_id}")
 async def browser_call(websocket: WebSocket, call_id: str) -> None:
+    if not guard.call_id_is_sane(call_id):
+        await guard.refuse(websocket, "the call id is not a uuid", call_id)
+        return
+    if not guard.origin_is_allowed(websocket.headers.get("origin")):
+        await guard.refuse(websocket, "the page is not one of ours", call_id)
+        return
+    if call_id in SESSIONS:
+        # Two sockets on one id used to overwrite each other, and then the
+        # first one's cleanup removed the second one's entry.
+        await guard.refuse(websocket, "that call already has a socket", call_id)
+        return
+
     await websocket.accept()
     session = VoiceSession(call_id,
                            send_json=_json_sender(websocket),
@@ -47,7 +60,10 @@ async def browser_call(websocket: WebSocket, call_id: str) -> None:
         reason = "error"
         log.exception("[%s] call failed: %s", call_id, e)
     finally:
-        SESSIONS.pop(call_id, None)
+        # Only if it is still ours: a later socket for the same call must not
+        # have its entry removed by this one's cleanup.
+        if SESSIONS.get(call_id) is session:
+            SESSIONS.pop(call_id, None)
         await session.close(reason)
 
 

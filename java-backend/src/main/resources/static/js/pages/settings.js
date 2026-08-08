@@ -162,6 +162,12 @@ async function save(form, entries, ctx) {
 
     try {
         const result = await api.put('/api/config', values);
+        // A refused value is not a failed request, so it would otherwise look
+        // like a successful save that quietly did nothing.
+        const refused = [...(result.rejected || []), ...(result.unknown || [])];
+        if (refused.length > 0) {
+            ctx.toast(ctx.strings['settings.rejected'].replace('%s', refused.join(', ')), 'bad');
+        }
         const message = result.changed === 0
             ? ctx.strings['settings.no_changes']
             : ctx.strings['settings.saved'].replace('%s', result.changed);

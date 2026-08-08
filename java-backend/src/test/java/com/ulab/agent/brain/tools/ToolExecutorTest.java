@@ -165,19 +165,63 @@ class ToolExecutorTest {
     // -------------------------------------------------------------- customers --
 
     @Test
-    void aCallerWhoReadsOutTheirCodeIsRecognisedAndStopsBeingAStranger() {
+    void aCallerWhoProvesWhoTheyAreStopsBeingAStranger() {
         TestCalls.Wiring wiring = TestCalls.wire(CallMode.NEW_CUSTOMER, Language.EN);
         wiring.customers().add("C001", "Example Customer One", "+8801711111111",
                 List.of("March: a repair, resolved."));
 
         String result = wiring.executor().run(wiring.session(), ToolRegistry.LOOKUP_CLIENT,
-                "{\"clientCode\":\"c001\"}");
+                "{\"clientCode\":\"c001\",\"phoneLastFour\":\"1111\"}");
 
         assertTrue(result.contains("\"ok\":true"));
-        assertTrue(result.contains("Example Customer One"));
+        assertFalse(result.contains("Example Customer One"),
+                "confirming an identity is not the same as disclosing it");
         assertEquals("C001", wiring.session().client().clientCode());
         assertEquals(CallMode.EXISTING_CUSTOMER, wiring.session().mode());
         assertEquals(List.of("Example Customer One"), wiring.log().identified);
+    }
+
+    @Test
+    void aGuessedCustomerCodeAloneIdentifiesNobody() {
+        // Codes run C001, C002, C003. On its own a code is a guess, and it used
+        // to be answered with the customer's real name. SECURITY-AUDIT SEC-006.
+        TestCalls.Wiring wiring = TestCalls.wire(CallMode.NEW_CUSTOMER, Language.EN);
+        wiring.customers().add("C001", "Example Customer One", "+8801711111111", List.of());
+
+        String result = wiring.executor().run(wiring.session(), ToolRegistry.LOOKUP_CLIENT,
+                "{\"clientCode\":\"C001\"}");
+
+        assertTrue(result.contains("\"ok\":false"));
+        assertFalse(result.contains("Example Customer One"));
+        assertNull(wiring.session().client());
+        assertEquals(CallMode.NEW_CUSTOMER, wiring.session().mode());
+    }
+
+    @Test
+    void theWrongLastFourDigitsIdentifyNobody() {
+        TestCalls.Wiring wiring = TestCalls.wire(CallMode.NEW_CUSTOMER, Language.EN);
+        wiring.customers().add("C001", "Example Customer One", "+8801711111111", List.of());
+
+        assertTrue(wiring.executor().run(wiring.session(), ToolRegistry.LOOKUP_CLIENT,
+                "{\"clientCode\":\"C001\",\"phoneLastFour\":\"9999\"}").contains("\"ok\":false"));
+        assertNull(wiring.session().client());
+    }
+
+    @Test
+    void aCallCannotBeUsedToReadTheCustomerListOneCodeAtATime() {
+        TestCalls.Wiring wiring = TestCalls.wire(CallMode.NEW_CUSTOMER, Language.EN);
+        wiring.customers().add("C001", "Example Customer One", "+8801711111111", List.of());
+
+        for (int guess = 1; guess <= 3; guess++) {
+            wiring.executor().run(wiring.session(), ToolRegistry.LOOKUP_CLIENT,
+                    "{\"clientCode\":\"C00" + guess + "\",\"phoneLastFour\":\"0000\"}");
+        }
+
+        // Even the right answer is refused now — the line is done answering.
+        String afterwards = wiring.executor().run(wiring.session(), ToolRegistry.LOOKUP_CLIENT,
+                "{\"clientCode\":\"C001\",\"phoneLastFour\":\"1111\"}");
+        assertTrue(afterwards.contains("\"ok\":false"));
+        assertNull(wiring.session().client());
     }
 
     @Test
@@ -243,7 +287,7 @@ class ToolExecutorTest {
         wiring.customers().add("C001", "Example Customer One", "+8801711111111",
                 List.of("March: a repair, resolved."));
         wiring.executor().run(wiring.session(), ToolRegistry.LOOKUP_CLIENT,
-                "{\"clientCode\":\"C001\"}");
+                "{\"clientCode\":\"C001\",\"phoneLastFour\":\"1111\"}");
 
         wiring.executor().run(wiring.session(), ToolRegistry.LOG_REQUEST,
                 "{\"summary\":\"August: asked about the warranty.\"}");

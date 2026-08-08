@@ -18,6 +18,16 @@
     <properties>
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!--
+          Mockito rewrites bytecode to build a mock, and it does that through
+          Byte Buddy, which has to understand the class-file version of whatever
+          JDK is running the tests. The version Boot 3.4.4 pins knows up to Java
+          24, so on a Java 25 machine every test that mocks anything failed
+          before it started — which was all fourteen of the login tests. The
+          jar is compiled for 21 either way; this is only about the JDK the
+          tests happen to be run on.
+        -->
+        <byte-buddy.version>1.18.0</byte-buddy.version>
     </properties>
 
     <dependencies>
@@ -41,6 +51,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
+        <!-- One operator login in front of everything. Until this arrived, any
+             process that could reach the port could read every customer record
+             and mint a Twilio token. See SECURITY-AUDIT.md SEC-002. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.postgresql</groupId>
@@ -61,7 +78,7 @@
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
-            <version>2.10.1</version>
+            <version>2.11.0</version>
         </dependency>
 
         <!-- JUnit, for the brain's pure logic: sentence splitting, prompt text,
@@ -69,6 +86,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- httpBasic() and friends, for asserting who gets past the login. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
 
@@ -105,4 +128,49 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+          Checks every dependency, and every dependency of a dependency, against
+          the public vulnerability database:
+
+              mvn -Psecurity-scan verify
+
+          It is a profile rather than part of the normal build on purpose. The
+          first run downloads a database of a few hundred megabytes and takes
+          several minutes, which is not something to put in front of somebody
+          who typed "mvn test". CI runs it on a schedule; see
+          .github/workflows/dependency-scan.yml.
+
+          CVSS 7 is the threshold at which the build fails. Below that the
+          report is written and the build carries on, because a report nobody
+          can get past is a report that gets switched off.
+        -->
+        <profile>
+            <id>security-scan</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.owasp</groupId>
+                        <artifactId>dependency-check-maven</artifactId>
+                        <version>10.0.4</version>
+                        <configuration>
+                            <failBuildOnCVSS>7</failBuildOnCVSS>
+                            <formats>
+                                <format>HTML</format>
+                                <format>JSON</format>
+                            </formats>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>check</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

@@ -62,6 +62,9 @@ public class ConversationBrain {
     /** Utterances the recogniser makes nothing of before the agent asks again. */
     private static final int UNHEARD_BEFORE_REPROMPT = 2;
 
+    /** Exchanges one call may have before it is ended as a runaway. */
+    private static final int MAX_TURNS_PER_CALL = 100;
+
     private final CallRegistry registry;
     private final PromptBuilder prompts;
     private final LlmRouter router;
@@ -121,6 +124,12 @@ public class ConversationBrain {
             return resumed;
         }
 
+        if (!registry.hasRoom()) {
+            log.warn("Refused call {}: {} are already running", callId, registry.count());
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                    Lang.ERR_TOO_MANY_CALLS);
+        }
+
         CallRecord record = callLog.require(callId);
         Business business = businesses.findById(record.getBusinessId()).orElseThrow(
                 () -> new ResponseStatusException(HttpStatus.CONFLICT, Lang.ERR_NO_ACTIVE_BUSINESS));
@@ -161,6 +170,16 @@ public class ConversationBrain {
         session.heardSomething();
 
         int turn = session.nextTurn();
+        if (turn > MAX_TURNS_PER_CALL) {
+            // A telephone conversation does not run to hundreds of exchanges.
+            // Something that does is a loop, and every lap of it is a billed
+            // request — so the call ends rather than the quota.
+            log.warn("[{}] reached {} turns; ending the call", callId, MAX_TURNS_PER_CALL);
+            session.requestHangup("turn_limit", spokenLine(session, "voice.goodbye"));
+            hangUpIfAsked(session);
+            return;
+        }
+
         session.setBusy(true);
         rememberWhatWasSaid(session, turn, text, tSttFinal);
 

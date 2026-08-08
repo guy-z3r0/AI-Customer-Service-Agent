@@ -1,0 +1,64 @@
+# Checks the two dependency trees, and the git history, for things that should
+# not be in them. Weekly rather than per-push: a new CVE against a dependency
+# that has not changed is news, and it does not arrive when somebody pushes.
+#
+# The secret sweep is the exception and runs on every push, because it is the
+# control that would have caught SECURITY-AUDIT.md's first finding — an API key
+# committed in the very first commit and present in every one after it.
+
+name: dependency & secret scan
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # Monday, 04:00 UTC.
+    - cron: '0 4 * * 1'
+
+jobs:
+  secrets:
+    name: secret sweep (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The whole history, not just the tip — a key removed from the working
+          # copy is still a published key if it is in an older commit.
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  java:
+    name: java dependencies (owasp)
+    runs-on: ubuntu-latest
+    # Only on the schedule: the vulnerability database is a few hundred
+    # megabytes and this takes minutes, which is not a per-push cost worth
+    # paying for a set of dependencies that changes a few times a year.
+    if: github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+      - run: mvn -B -Psecurity-scan verify -DskipTests
+        working-directory: java-backend
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-check-report
+          path: java-backend/target/dependency-check-report.*
+
+  python:
+    name: python dependencies (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pip-audit
+      - run: pip-audit --requirement requirements.txt --strict
+        working-directory: python-voice

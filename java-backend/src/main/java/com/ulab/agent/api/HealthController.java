@@ -16,6 +16,7 @@ import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 /**
  * What the panel's status bar reads every few seconds.
@@ -51,6 +52,21 @@ public class HealthController {
     public HealthView health() {
         return new HealthView(databaseState(), voiceServerState(), providerName(),
                 providerKeyReady(), placeholderKeys());
+    }
+
+    /**
+     * Is the process up — nothing more.
+     *
+     * This is the one health endpoint that answers without a login, because a
+     * container health check cannot log in. It deliberately says nothing about
+     * what is configured: the full reply lists exactly which credentials are
+     * still placeholders, which is also a list of which ones are real, and
+     * that is worth knowing to somebody deciding whether toll fraud is worth
+     * attempting. See SECURITY-AUDIT.md SEC-019.
+     */
+    @GetMapping("/live")
+    public Map<String, String> live() {
+        return Map.of("status", "up");
     }
 
     private String databaseState() {

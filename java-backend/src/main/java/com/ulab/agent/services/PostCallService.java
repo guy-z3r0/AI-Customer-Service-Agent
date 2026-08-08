@@ -27,6 +27,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 /**
  * What happens after everyone has hung up: the call is read back, written up,
@@ -53,6 +55,19 @@ public class PostCallService {
     /** The one mode that means a person has been promised. */
     private static final String NEEDS_A_PERSON = "COMPLEX_REQUEST";
 
+    /**
+     * How many calls may be written up at once.
+     *
+     * Each write-up is a model request that is paid for, and the executor below
+     * will happily start one per call that ends. Four is enough that a summary
+     * never waits long behind another, and few enough that a burst of endings
+     * cannot open an unbounded number of billed requests at the same moment.
+     */
+    private static final int CONCURRENT_WRITE_UPS = 4;
+
+    /** How long a shutdown waits for a summary that is already being written. */
+    private static final int DRAIN_SECONDS = 30;
+
     private final CallHistoryService history;
     private final CallRecordRepository calls;
     private final CallSummaryRepository summaries;
@@ -62,6 +77,7 @@ public class PostCallService {
     private final MailService mail;
 
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
+    private final Semaphore modelRequests = new Semaphore(CONCURRENT_WRITE_UPS);
 
     public PostCallService(CallHistoryService history, CallRecordRepository calls,
                            CallSummaryRepository summaries, AiSettingsRepository aiSettings,
@@ -76,20 +92,45 @@ public class PostCallService {
         this.mail = mail;
     }
 
+    /**
+     * Lets the work already in flight finish before the process goes away.
+     *
+     * shutdown() on its own only stops new work being accepted; it returns
+     * immediately and the JVM exits underneath whatever was running. A summary
+     * being written at that moment was simply lost, and if it was the kind of
+     * call that ends in an email to a colleague, so was the email.
+     */
     @PreDestroy
     void stopWorkers() {
         workers.shutdown();
+        try {
+            if (!workers.awaitTermination(DRAIN_SECONDS, TimeUnit.SECONDS)) {
+                log.warn("Gave up waiting for the last write-up after {}s", DRAIN_SECONDS);
+                workers.shutdownNow();
+            }
+        } catch (InterruptedException interrupted) {
+            workers.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
     /** Hands the call over to be written up. Returns at once. */
     public void onCallEnded(UUID callId) {
         workers.submit(() -> {
             try {
+                modelRequests.acquire();
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            try {
                 writeUp(callId);
             } catch (RuntimeException failed) {
                 // A call that cannot be summarised is still a call that happened;
                 // the transcript is safe either way.
                 log.warn("[{}] could not be written up: {}", callId, failed.toString());
+            } finally {
+                modelRequests.release();
             }
         });
     }

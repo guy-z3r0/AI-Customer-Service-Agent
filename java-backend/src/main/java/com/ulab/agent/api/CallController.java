@@ -57,7 +57,8 @@ public class CallController {
     }
 
     @PostMapping("/start")
-    public CallDtos.StartView start(@RequestBody(required = false) CallDtos.StartRequest request) {
+    public CallDtos.StartView start(
+            @Valid @RequestBody(required = false) CallDtos.StartRequest request) {
         CallDtos.StartRequest safe = request == null
                 ? new CallDtos.StartRequest("browser", null, null, null) : request;
         CallRecord call = callLog.start(safe);

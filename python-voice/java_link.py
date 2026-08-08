@@ -18,7 +18,7 @@ import json
 import logging
 import re
 
-from config import JAVA_BASE_URL
+from config import JAVA_BASE_URL, java_auth_header
 
 log = logging.getLogger(__name__)
 
@@ -119,9 +119,15 @@ class TurnLink:
         if connect is None:
             return False
 
+        # The brain requires the operator login, and a websocket handshake is an
+        # HTTP request like any other — so the credentials ride on it as a
+        # header. Without them Java answers 401 and the call never connects.
+        headers = java_auth_header()
+
         for attempt in range(1, ATTEMPTS + 1):
             try:
-                self._socket = await connect(self._url, open_timeout=CONNECT_TIMEOUT_S)
+                self._socket = await connect(self._url, open_timeout=CONNECT_TIMEOUT_S,
+                                             additional_headers=headers)
                 log.info("[%s] connected to the brain", self.call_id)
                 return True
             except Exception as e:

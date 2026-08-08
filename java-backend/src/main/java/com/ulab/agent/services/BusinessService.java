@@ -186,9 +186,23 @@ public class BusinessService {
     // ------------------------------------------------------------ internals --
 
     private static void apply(EscalationContact contact, EditorDtos.EscalationRequest request) {
-        contact.setName(request.name().trim());
-        contact.setEmail(request.email().trim());
+        contact.setName(oneLine(request.name()));
+        contact.setEmail(oneLine(request.email()));
         contact.setPriority(request.priority() == null ? 1 : request.priority());
+    }
+
+    /**
+     * A name or address with no line breaks in it.
+     *
+     * All three of these end up in an email — the business name in the subject
+     * of the escalation, the contact's name and address in its headers. A
+     * carriage return in a header value is how a second header gets added to
+     * somebody else's message. Jakarta Mail folds and encodes subjects, so this
+     * was unlikely to be exploitable; taking the characters out on the way in
+     * costs a line and means nobody downstream has to know that.
+     */
+    private static String oneLine(String value) {
+        return value == null ? null : value.replaceAll("[\\r\\n]+", " ").trim();
     }
 
     private static EditorDtos.EscalationView toView(EscalationContact contact) {
@@ -210,7 +224,8 @@ public class BusinessService {
     }
 
     private void apply(Business business, BusinessUpsertRequest request) {
-        business.setName(request.name().trim());
+        // The name reaches the subject line of the escalation email — see oneLine.
+        business.setName(oneLine(request.name()));
         business.setPhone(blankToNull(request.phone()));
         business.setEmail(blankToNull(request.email()));
         business.setAddress(blankToNull(request.address()));

@@ -76,7 +76,10 @@ def twilio(monkeypatch):
     twilio_ws.SESSIONS.clear()
 
 
-def start_event(call_id="abc-123"):
+CALL_ID = "6f1a2b3c-4d5e-4f60-8a9b-0c1d2e3f4a5b"
+
+
+def start_event(call_id=CALL_ID):
     return {
         "event": "start",
         "streamSid": "MZ0000",
@@ -88,12 +91,12 @@ def test_the_call_id_comes_from_the_streams_custom_parameters(twilio):
     socket = FakeTwilioSocket()
     stream = twilio._Stream(socket)
 
-    asyncio.run(stream.begin(start_event("call-42")))
+    asyncio.run(stream.begin(start_event()))
 
-    assert stream.call_id == "call-42"
+    assert stream.call_id == CALL_ID
     assert stream._session.started
     assert stream._session.telephony == "twilio", "the brain must know it is a phone"
-    assert "call-42" in twilio.SESSIONS
+    assert CALL_ID in twilio.SESSIONS
 
 
 def test_a_stream_with_no_call_id_is_refused_rather_than_guessed(twilio):
@@ -105,6 +108,35 @@ def test_a_stream_with_no_call_id_is_refused_rather_than_guessed(twilio):
     assert stream._session is None
     assert socket.closed_with == 1008
     assert twilio.SESSIONS == {}
+
+
+def test_a_call_id_that_is_not_a_uuid_is_refused(twilio):
+    # The id is interpolated into the URL this server dials on the backend, so
+    # a chosen string is a chosen destination. SECURITY-AUDIT SEC-009.
+    socket = FakeTwilioSocket()
+    stream = twilio._Stream(socket)
+
+    asyncio.run(stream.begin(start_event("../../somewhere-else")))
+
+    assert stream._session is None
+    assert socket.closed_with == 1008
+    assert twilio.SESSIONS == {}
+
+
+def test_a_second_stream_cannot_take_over_a_live_call(twilio):
+    first = twilio._Stream(FakeTwilioSocket())
+    second_socket = FakeTwilioSocket()
+    second = twilio._Stream(second_socket)
+
+    async def scenario():
+        await first.begin(start_event())
+        await second.begin(start_event())
+
+    asyncio.run(scenario())
+
+    assert second._session is None
+    assert second_socket.closed_with == 1008
+    assert twilio.SESSIONS[CALL_ID] is first._session, "the live call is untouched"
 
 
 def test_the_callers_voice_arrives_as_the_internal_format(twilio):

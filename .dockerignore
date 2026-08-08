@@ -1,0 +1,31 @@
+# What must never reach a build context rooted at the repository.
+#
+# Note that compose does not build either service from here: it uses
+# "context: ./java-backend" and "context: ./python-voice", and Docker reads
+# .dockerignore from the root of the build context — so for those two builds it
+# is java-backend/.dockerignore and python-voice/.dockerignore that apply, not
+# this file. This one covers a build run from the top of the repository by hand.
+# The three are kept in step deliberately; changing one means changing them all.
+
+.git
+.gitignore
+.env
+.env.*
+secrets/
+logs/
+
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/*.pyc
+
+**/target/
+java-backend/.embedded-postgres/
+java-backend/.idea/
+
+# The v1 JSON tree is mounted at run time by compose, not built in — and it
+# carries example customer records that have no business in an image.
+java-backend/data/
+
+docs/
+*.md

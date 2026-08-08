@@ -54,7 +54,11 @@ public final class TestCalls {
         public final List<ClientDtos.ClientView> records = new ArrayList<>();
 
         public Customers() {
-            super(null);
+            // No repository and no database: every method that would touch one
+            // is overridden below. The key is a constructor argument now rather
+            // than a field Spring fills in afterwards, which is what lets this
+            // class exist at all without a running context.
+            super(null, "TEST_ONLY_NOT_A_KEY");
         }
 
         /** Puts somebody on the books before a test starts. */

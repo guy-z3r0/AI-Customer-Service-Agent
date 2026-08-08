@@ -5,6 +5,7 @@ import com.ulab.agent.services.ConfigService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,6 +34,10 @@ public class ConfigController {
     /** A voice list is worth waiting a moment for; a hung one is not. */
     private static final Duration VOICE_LIST_TIMEOUT = Duration.ofSeconds(8);
 
+    private static final ParameterizedTypeReference<Map<String, Object>> VOICE_LIST =
+            new ParameterizedTypeReference<>() {
+            };
+
     private final ConfigService config;
     private final RestClient voiceServer;
 
@@ -51,8 +56,8 @@ public class ConfigController {
     }
 
     @PutMapping
-    public Map<String, Object> update(@RequestBody Map<String, String> values) {
-        return Map.of("changed", config.update(values));
+    public ConfigService.UpdateResult update(@RequestBody Map<String, String> values) {
+        return config.update(values);
     }
 
     /**
@@ -66,11 +71,24 @@ public class ConfigController {
     @GetMapping("/voices")
     public Map<String, Object> voices() {
         try {
-            return voiceServer.get().uri("/voices").retrieve().body(Map.class);
+            // Not a rescan. Enumerating voices starts a speech engine, and this
+            // is called every time Settings is opened — refreshing on each one
+            // turned a page load into an unbounded amount of work.
+            //
+            // The type reference rather than Map.class: the raw form was the one
+            // unchecked warning in this codebase, and an empty body would have
+            // been returned to the panel as a null it does not expect.
+            Map<String, Object> found = voiceServer.get().uri("/voices").retrieve().body(VOICE_LIST);
+            return found == null ? noVoices() : found;
         } catch (RuntimeException e) {
             log.info("Could not read the voice list from the voice server: {}", e.toString());
-            return Map.of("voices", List.of(), "speaks", List.of(), "provider", "unknown");
+            return noVoices();
         }
+    }
+
+    /** What the page falls back to: a plain text field, as it always used to be. */
+    private static Map<String, Object> noVoices() {
+        return Map.of("voices", List.of(), "speaks", List.of(), "provider", "unknown");
     }
 
     private static ClientHttpRequestFactory timeoutFactory() {

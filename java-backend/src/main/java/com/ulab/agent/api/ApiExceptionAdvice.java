@@ -10,6 +10,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -47,6 +48,22 @@ public class ApiExceptionAdvice {
     public ResponseEntity<Map<String, String>> handleConflict(DataIntegrityViolationException e) {
         log.warn("Rejected by a database constraint: {}", e.getMostSpecificCause().getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body(Lang.ERR_CONFLICT, null));
+    }
+
+    /**
+     * A path that names no file and no endpoint.
+     *
+     * Without this it fell through to the catch-all below and became a 500 with
+     * a full stack trace in the log. Every browser asks for /favicon.ico on
+     * every page load and this app has none, so a normal afternoon of using the
+     * panel wrote hundreds of stack traces to a file that is now rotated and
+     * kept — and any mistyped API path answered "the server is broken" when the
+     * truth was "there is nothing here".
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, String>> handleMissing(NoResourceFoundException e) {
+        log.debug("Nothing at {}", e.getResourcePath());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body(Lang.ERR_NOT_FOUND, null));
     }
 
     @ExceptionHandler(Exception.class)

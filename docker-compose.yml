@@ -3,7 +3,8 @@
 # Three services: the database, the Java backend (which also serves the web
 # control panel), and the Python voice server that carries call audio.
 #
-# Ports are published on 127.0.0.1 only — the panel has no login and is not
+# Ports are published on 127.0.0.1 only — a second line of defence behind the
+# operator login, and the reason the panel is not
 # meant to be reachable from the network.
 
 services:
@@ -38,6 +39,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-agent}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-PLACEHOLDER_DB_PASSWORD}
       PII_ENC_KEY: ${PII_ENC_KEY:-PLACEHOLDER_PII_ENC_KEY}
+      # The operator login guarding the panel, the API and the websockets.
+      # Both containers get the same pair; the voice server signs in with it.
+      PANEL_USER: ${PANEL_USER:-operator}
+      PANEL_PASSWORD: ${PANEL_PASSWORD:-}
       # Container-to-container for the health check; the browser gets the
       # published address instead, because it is outside this network.
       VOICE_INTERNAL_URL: http://python-voice:8090
@@ -54,6 +59,17 @@ services:
       context: ./python-voice
     environment:
       JAVA_BASE_URL: http://java-backend:8080
+      # The same login the backend expects, so this server can fetch settings
+      # and open a turn socket. Without it every call gets 401 and never starts.
+      PANEL_USER: ${PANEL_USER:-operator}
+      PANEL_PASSWORD: ${PANEL_PASSWORD:-}
+      # Which pages may open a call socket here. A websocket is not covered by
+      # the browser's same-origin rule, so this is the check that stands in for
+      # it. It has to name the port the panel is actually published on: the
+      # default inside the voice server assumes 8080, and setting JAVA_PORT to
+      # anything else would otherwise refuse every browser call with a close
+      # code and no explanation.
+      ALLOWED_ORIGINS: http://localhost:${JAVA_PORT:-8080},http://127.0.0.1:${JAVA_PORT:-8080}
       # Google speech is used only if a real key file is mounted below.
       GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/gcp-credentials.json
     volumes:

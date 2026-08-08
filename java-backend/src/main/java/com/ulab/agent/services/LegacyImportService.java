@@ -52,17 +52,23 @@ public class LegacyImportService {
     @PersistenceContext
     private EntityManager entityManager;
 
-    /** Same key the Flyway seed used, so every client row decrypts the same way. */
-    @Value("${PII_ENC_KEY:PLACEHOLDER_PII_ENC_KEY}")
-    private String piiEncryptionKey;
-
+    private final String piiEncryptionKey;
     private final TransactionTemplate perBusiness;
 
+    /**
+     * @param piiEncryptionKey the same key the Flyway seed used, so every client
+     *                         row decrypts the same way. Through the constructor
+     *                         rather than onto the field, so it is final and
+     *                         there is no window in which this class exists
+     *                         without it.
+     */
     public LegacyImportService(BusinessRepository businesses, AiSettingsRepository aiSettings,
-                               KbEntryRepository kbEntries, PlatformTransactionManager transactions) {
+                               KbEntryRepository kbEntries, PlatformTransactionManager transactions,
+                               @Value("${PII_ENC_KEY:PLACEHOLDER_PII_ENC_KEY}") String piiEncryptionKey) {
         this.businesses = businesses;
         this.aiSettings = aiSettings;
         this.kbEntries = kbEntries;
+        this.piiEncryptionKey = piiEncryptionKey;
 
         // Each folder gets its own transaction. Postgres abandons a whole
         // transaction the moment one statement fails, so sharing one across
@@ -208,10 +214,11 @@ public class LegacyImportService {
             if (code == null || name == null) continue;
 
             entityManager.createNativeQuery("""
-                    INSERT INTO client (business_id, client_code, name, phone_enc, email_enc,
-                                        notes, past_issues_json)
+                    INSERT INTO client (business_id, client_code, name, phone_enc, phone_hash,
+                                        email_enc, notes, past_issues_json)
                     VALUES (cast(:businessId as uuid), cast(:code as text), cast(:name as text),
                             pgp_sym_encrypt(cast(:phone as text), cast(:key as text)),
+                            decode(cast(:phoneHash as text), 'hex'),
                             pgp_sym_encrypt(cast(:email as text), cast(:key as text)),
                             cast(:notes as text), cast(:pastIssues as jsonb))
                     ON CONFLICT (business_id, client_code) DO NOTHING
@@ -220,6 +227,10 @@ public class LegacyImportService {
                     .setParameter("code", code)
                     .setParameter("name", name)
                     .setParameter("phone", text(client, "phoneNumber", null))
+                    // Imported rows need the lookup value too, or an inbound call
+                    // from one of them falls back to decrypting the whole list.
+                    .setParameter("phoneHash", ClientService.phoneHash(
+                            text(client, "phoneNumber", null)))
                     .setParameter("email", text(client, "email", null))
                     .setParameter("key", piiEncryptionKey)
                     .setParameter("notes", text(client, "notes", null))

@@ -4,6 +4,16 @@ server:
   # before compose can publish it back to 127.0.0.1 on the host.
   address: ${SERVER_ADDRESS:127.0.0.1}
   port: ${SERVER_PORT:8080}
+  servlet:
+    session:
+      cookie:
+        # HTTP Basic creates no session today, so nothing sets this cookie and
+        # these two lines change nothing on their own. They are here so that the
+        # day something does create one — a form login, a "remember me" — it is
+        # not reachable from another site and not readable from script. Strict
+        # rather than Lax because nothing ever links into this panel.
+        same-site: strict
+        http-only: true
 
 spring:
   application:
@@ -26,9 +36,13 @@ spring:
       pii_enc_key: ${PII_ENC_KEY:PLACEHOLDER_PII_ENC_KEY}
 
   jpa:
-    # Flyway owns the schema. Hibernate must never touch it.
+    # Flyway owns the schema. Hibernate must never touch it — but it should
+    # check it. "validate" compares every entity against the tables Flyway just
+    # migrated and refuses to boot when they disagree, which turns a field
+    # added without a migration into a startup error rather than into a query
+    # that fails during a call. It creates and alters nothing.
     hibernate:
-      ddl-auto: none
+      ddl-auto: validate
     open-in-view: false
     properties:
       hibernate:

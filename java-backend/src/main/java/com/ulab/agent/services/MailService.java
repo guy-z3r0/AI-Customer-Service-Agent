@@ -31,6 +31,9 @@ public class MailService {
     /** Long enough for a slow relay, short enough not to hold a thread all day. */
     private static final String TIMEOUT_MS = "10000";
 
+    /** The port that wants TLS from the first byte instead of an upgrade. */
+    private static final int IMPLICIT_TLS_PORT = 465;
+
     private final ConfigService config;
 
     public MailService(ConfigService config) {
@@ -53,8 +56,8 @@ public class MailService {
             return false;
         }
         if (!isConfigured()) {
-            log.warn("No SMTP settings, so this email was logged instead of sent."
-                    + "\nTo: {}\nSubject: {}\n{}", recipients, subject, body);
+            log.warn("No SMTP settings, so this escalation was logged instead of sent."
+                    + "\nTo: {}\nSubject: {}\n{}", recipients, subject, readable(body));
             return false;
         }
         return deliver(recipients, subject, body);
@@ -84,8 +87,39 @@ public class MailService {
                         attempt, failed.getMessage());
             }
         }
-        log.warn("The escalation email was not sent. It said:\n{}\n{}", subject, body);
+        log.warn("The escalation email was not sent. It said:\n{}\n{}", subject, readable(body));
         return false;
+    }
+
+    /**
+     * As much of a message as belongs in a log file.
+     *
+     * The body carries the whole call transcript. Losing an escalation silently
+     * is worse than logging it, which is why the fallback exists at all — but
+     * application logs are not treated as customer records, so by default only
+     * the summary survives and the transcript is counted, not copied. Turn
+     * log_unsent_email_body on to get the lot while debugging a relay.
+     */
+    private String readable(String body) {
+        if (!"true".equalsIgnoreCase(config.getString("log_unsent_email_body", "false"))) {
+            int lines = body.split("\n", -1).length;
+            int transcript = body.indexOf("\n\n", body.indexOf("\n\n") + 1);
+            return (transcript > 0 ? body.substring(0, transcript) : body)
+                    + "\n[" + lines + " lines withheld — set log_unsent_email_body to see them]";
+        }
+        return body;
+    }
+
+    /**
+     * Whether to log in to the relay.
+     *
+     * The setting decides it, and a blank username overrides it — asking a
+     * server to authenticate with nothing to authenticate as fails in a way
+     * that is hard to read from the error.
+     */
+    boolean wantsAuthentication() {
+        boolean wanted = !"false".equalsIgnoreCase(config.getString("smtp_auth", "true"));
+        return wanted && !config.getString("smtp_username", "").isBlank();
     }
 
     private JavaMailSenderImpl buildSender() {
@@ -98,11 +132,30 @@ public class MailService {
 
         Properties properties = sender.getJavaMailProperties();
         properties.put("mail.transport.protocol", "smtp");
-        // Authentication only when a username was given; some relays on a local
-        // network take mail from anybody and refuse a login attempt outright.
-        properties.put("mail.smtp.auth",
-                String.valueOf(!config.isPlaceholder("smtp_username")));
-        properties.put("mail.smtp.starttls.enable", "true");
+        // Some relays on a local network take mail from anybody and refuse a
+        // login attempt outright, so not logging in has to be possible. It used
+        // to be inferred from whether the username still looked like a
+        // placeholder, which turns authentication off for any real username
+        // beginning "PLACEHOLDER_" — and the relay then refuses the message
+        // with an error that says nothing about why. It is a setting now.
+        properties.put("mail.smtp.auth", String.valueOf(wantsAuthentication()));
+
+        // What travels over this connection is a full call transcript and the
+        // SMTP password. "enable" only *attempts* TLS: a server that does not
+        // advertise STARTTLS — or an attacker who strips it from the greeting —
+        // silently gets everything in clear text. "required" refuses instead.
+        // checkserveridentity makes the certificate have to match the host,
+        // without which any certificate at all is accepted.
+        if (sender.getPort() == IMPLICIT_TLS_PORT) {
+            // Port 465 expects TLS from the first byte rather than an upgrade.
+            properties.put("mail.smtp.ssl.enable", "true");
+        } else {
+            properties.put("mail.smtp.starttls.enable", "true");
+            properties.put("mail.smtp.starttls.required", "true");
+        }
+        properties.put("mail.smtp.ssl.checkserveridentity", "true");
+        properties.put("mail.smtp.ssl.protocols", "TLSv1.2 TLSv1.3");
+
         properties.put("mail.smtp.connectiontimeout", TIMEOUT_MS);
         properties.put("mail.smtp.timeout", TIMEOUT_MS);
         properties.put("mail.smtp.writetimeout", TIMEOUT_MS);

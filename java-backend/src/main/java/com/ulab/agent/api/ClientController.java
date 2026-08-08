@@ -50,7 +50,7 @@ public class ClientController {
 
     @GetMapping("/{clientId}")
     public ClientDtos.ClientView get(@PathVariable UUID businessId, @PathVariable UUID clientId) {
-        return clients.get(clientId);
+        return clients.get(businessId, clientId);
     }
 
     @PostMapping
@@ -63,12 +63,12 @@ public class ClientController {
     @PutMapping("/{clientId}")
     public ClientDtos.ClientView update(@PathVariable UUID businessId, @PathVariable UUID clientId,
                                         @Valid @RequestBody ClientDtos.ClientUpsertRequest request) {
-        return clients.update(clientId, request);
+        return clients.update(businessId, clientId, request);
     }
 
     @DeleteMapping("/{clientId}")
     public ResponseEntity<Void> delete(@PathVariable UUID businessId, @PathVariable UUID clientId) {
-        clients.delete(clientId);
+        clients.delete(businessId, clientId);
         return ResponseEntity.noContent().build();
     }
 }

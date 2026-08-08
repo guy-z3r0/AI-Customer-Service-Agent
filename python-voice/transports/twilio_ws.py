@@ -26,6 +26,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from audio import SAMPLE_RATE, resample_pcm16, ulaw_decode, ulaw_encode
 from session import VoiceSession
+from transports import guard
 
 log = logging.getLogger(__name__)
 
@@ -107,11 +108,18 @@ class _Stream:
         parameters = start.get("customParameters") or {}
         self.call_id = parameters.get("callId")
 
-        if not self.call_id:
-            # Without an id there is no call record to attach to, and the brain
-            # would refuse the connection anyway. Better to say so here.
-            log.warning("A Twilio stream arrived with no callId parameter; dropping it")
-            await self._websocket.close(code=1008)
+        if not guard.call_id_is_sane(self.call_id):
+            # Without a real id there is no call record to attach to, and an id
+            # that is not a uuid is a string somebody chose — it goes into the
+            # URL this server then dials on the backend.
+            await guard.refuse(self._websocket, "no usable callId on the stream",
+                               self.call_id or "")
+            self.call_id = None
+            return
+        if self.call_id in SESSIONS:
+            await guard.refuse(self._websocket, "that call already has a media stream",
+                               self.call_id)
+            self.call_id = None
             return
 
         self._session = VoiceSession(self.call_id,
@@ -143,7 +151,8 @@ class _Stream:
     async def close(self, reason: str) -> None:
         if self._session is None:
             return
-        SESSIONS.pop(self.call_id, None)
+        if SESSIONS.get(self.call_id) is self._session:
+            SESSIONS.pop(self.call_id, None)
         session, self._session = self._session, None
         await session.close(reason)
 

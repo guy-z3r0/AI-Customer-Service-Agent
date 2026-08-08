@@ -50,6 +50,8 @@ public final class Lang {
     public static final String ERR_KB_NOT_FOUND = "No knowledge entry with that id.";
     public static final String ERR_CONTACT_NOT_FOUND = "No escalation contact with that id.";
     public static final String ERR_CALL_NOT_LIVE = "That call is not running.";
+    public static final String ERR_TOO_MANY_CALLS =
+            "Too many calls are running at once. End one and try again.";
     public static final String ERR_MODE_NOT_ALLOWED =
             "A call cannot move to that screening mode from where it is now.";
     public static final String ERR_TWILIO_NOT_SET_UP =
@@ -65,6 +67,7 @@ public final class Lang {
             "Sorry, there is nobody available to take this call. Goodbye.";
     public static final String ERR_CONFLICT = "That change clashes with something already saved.";
     public static final String ERR_UNEXPECTED = "Something went wrong on the server.";
+    public static final String ERR_NOT_FOUND = "There is nothing at that address.";
 
     // ------------------------------------- defaults for newly created records --
     public static final String DEFAULT_PERSONA_NAME = "Agent";
@@ -188,6 +191,8 @@ public final class Lang {
         m.put("settings.save", pair("Save settings", "সেটিংস সেভ করুন"));
         m.put("settings.saved", pair("%s setting(s) saved", "%s টি সেটিংস সেভ হয়েছে"));
         m.put("settings.no_changes", pair("Nothing changed", "কিছু বদলায়নি"));
+        m.put("settings.rejected", pair("Not saved — these were not accepted: %s",
+                "সেভ হয়নি — এগুলো গ্রহণ করা হয়নি: %s"));
         m.put("settings.badge_placeholder", pair("PLACEHOLDER", "PLACEHOLDER"));
         m.put("settings.secret_hint", pair("Leave blank to keep the stored value",
                 "সংরক্ষিত মান রাখতে ফাঁকা রাখুন"));

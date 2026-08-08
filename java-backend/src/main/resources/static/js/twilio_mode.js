@@ -11,10 +11,18 @@
  * a feature most installs never configure, would be the wrong trade.
  */
 
-// Pinned rather than floating: an SDK that silently upgrades itself is an app
-// that breaks without a commit. Verified in a browser at this exact URL —
-// it exposes Twilio.Device 2.18.3, and isSupported answers true.
-const SDK_URL = 'https://cdn.jsdelivr.net/npm/@twilio/voice-sdk@2.18.3/dist/twilio.min.js';
+// Served from this app rather than from a CDN.
+//
+// Pinning the version stopped the package changing under us; it did nothing
+// about the content delivery network serving something else, and this script
+// runs in the same origin as every customer record. Vendoring settles both,
+// and it removes a network dependency from a telephony feature — which is
+// exactly the dependency you do not want failing halfway through a call.
+//
+// The file is @twilio/voice-sdk 2.18.3, verified to expose Twilio.Device with
+// isSupported true. Replacing it means downloading a new version, checking the
+// same, and changing this one line.
+const SDK_URL = '/vendor/twilio-voice-2.18.3.min.js';
 
 let sdkPromise = null;
 

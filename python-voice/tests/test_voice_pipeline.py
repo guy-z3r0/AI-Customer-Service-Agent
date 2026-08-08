@@ -11,7 +11,6 @@ Run with:  cd python-voice && python -m pytest
 """
 
 import asyncio
-import json
 import os
 import sys
 
@@ -414,6 +413,67 @@ def test_a_brain_that_cannot_be_reached_apologises_and_ends_the_call(wired):
     assert wired.spoken == ["The line has dropped."]
     assert call._closed
     assert wired.brain.of_type("call_end")[0]["reason"] == "brain_unreachable"
+
+
+# ------------------------------------------------------- turn-taking bugs --
+
+def test_a_sentence_arriving_late_still_ends_the_turn(wired):
+    """BUG-006. The end of a turn used to be decided by asking two questions of
+    each sentence as it finished: was this the one marked last, and is the queue
+    empty now? A sentence still waiting behind the last one answers the second
+    "no" — and that sentence is not itself marked last, so it answers the first
+    "no" too. Neither ends the turn and nothing ever will. The microphone stays
+    shut, the brain's silence clock never starts, and the call sits there.
+
+    Counting what has been handed over against what has been spoken cannot fall
+    down that gap.
+    """
+    recorder = Recorder()
+
+    async def scenario():
+        call = session_module.VoiceSession("test-call", recorder.send_json, recorder.send_audio)
+        await call.start("en")
+
+        # The brain finishes its turn, then adds an afterthought before the
+        # first sentence has finished being spoken.
+        await call._enqueue(1, "That is all sorted.", True)
+        await call._enqueue(1, "Oh, and one more thing.", False)
+
+        await _settle()
+        await call.close()
+        return call
+
+    asyncio.run(scenario())
+
+    states = [m["speaking"] for m in recorder.json if m.get("type") == "agent_state"]
+    assert states == [True, False], "the agent has to be heard to stop, not just to start"
+    assert wired.brain.of_type("agent_done"), "the caller's silence clock never started"
+    assert wired.spoken == ["That is all sorted.", "Oh, and one more thing."]
+
+
+def test_a_transcript_is_held_onto_until_it_has_been_sent(wired):
+    """BUG-003. The recogniser's callbacks are ordinary functions on the event
+    loop, so the only way to send their result onward is a task — and the loop
+    keeps only a weak reference to one. A task nobody else holds can be
+    collected before it runs, silently losing a line of the caller's speech.
+    """
+    recorder = Recorder()
+
+    async def scenario():
+        call = session_module.VoiceSession("test-call", recorder.send_json, recorder.send_audio)
+        await call.start("en")
+
+        call._on_partial("half a sen")
+        assert call._pending, "something other than the loop has to be holding it"
+
+        await _settle()
+        assert not call._pending, "and let go of it once it is done"
+        await call.close()
+
+    asyncio.run(scenario())
+
+    partials = wired.brain.of_type("transcript_partial")
+    assert [p["text"] for p in partials] == ["half a sen"]
 
 
 async def _settle():

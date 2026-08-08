@@ -430,6 +430,39 @@ Three rules set here:
 The model is now chosen by measurement: `gemini-3.1-flash-lite` answers in a median 800 ms
 against `gemini-3.6-flash`'s 3823 ms, and the whole turn budget is 2000 ms.
 
+## What the security and defect passes changed
+
+Not a phase — two passes over `SECURITY-AUDIT.md`, the first closing the 🔴/🟠/🟡 findings and
+the second the 🔵 Low ones, the bugs and the warnings. The shape of the system is unchanged;
+what changed is what stands in front of it and what the database holds.
+
+```
+        anything at all ──▶ SecurityFilterChain ──▶ one operator, HTTP Basic, BCrypt
+                                   │
+                                   ├── /api/twilio/voice   ← signature instead of a login
+                                   └── /api/health/live    ← a bare "the process is up"
+
+  browser ──▶ /ws/browser/{uuid} ──▶ guard.py: is it a UUID? is the Origin ours?
+  Twilio  ──▶ /ws/twilio         ──▶ the same, plus the callId the webhook opened
+```
+
+| Layer | Added or changed |
+|---|---|
+| `api/` | `SecurityConfig` — the login, and the CSP / frame / referrer / permissions headers with it. Session cookie is `SameSite=strict`, which is what stands in for the CSRF tokens the panel's websockets cannot carry |
+| `db/migration/` | `V7` — `smtp_auth` and `log_unsent_email_body`, two settings that were being inferred. `V8` — `client.phone_hash`, an indexed SHA-256 of the last nine digits, so finding an inbound caller is a lookup rather than a decryption per customer |
+| `services/` | `ClientService` scopes every read and write by business id and takes its key through the constructor; `CallLogService` locks the call row before choosing a line number; `PostCallService` drains on shutdown and holds four write-ups at a time; `MailService` requires STARTTLS and checks the certificate |
+| `utils/` | `PiiMasker` also masks cards, long account numbers and IBANs; `FileUtils.logError` writes through SLF4J instead of opening files of its own |
+| `python-voice/` | `transports/guard.py`; `session.py` keeps a strong reference to every background task and counts sentences to end a turn; `stt_gcp.py` retries the second language after ten minutes instead of never |
+| around the code | `logback-spring.xml` (rolling, capped), `.githooks/pre-commit` (gitleaks), `.github/workflows/dependency-scan.yml` (OWASP + pip-audit), a `.dockerignore` per build context, both images running as uid 10001 |
+
+Two rules set here:
+
+- **A number is a hint, never proof.** Caller ID does not bind a call to a customer record;
+  the agent has to confirm who it is speaking to, and three wrong answers lock the call.
+- **Nothing stored is an instruction.** Text that came from a caller — past issues, notes — is
+  fenced as `<caller_record trust="data-only">` in the prompt, with chat-role prefixes and
+  angle brackets neutralised on the way in.
+
 ## Panel screens in contract parts
 
 Named in Nocturne vocabulary so screens are assembled, not invented: shell = `side-rail`

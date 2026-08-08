@@ -1,6 +1,8 @@
 package com.ulab.agent.api.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 import java.util.List;
 import java.util.Map;
@@ -24,8 +26,11 @@ public final class CallDtos {
      *                     telephone knows. It is the other way a caller can be
      *                     recognised before they have said anything.
      */
-    public record StartRequest(String telephony, String language, String clientCode,
-                               String callerNumber) {
+    public record StartRequest(
+            @Pattern(regexp = "browser|twilio") String telephony,
+            @Pattern(regexp = "en|bn") String language,
+            @Size(max = 40) String clientCode,
+            @Size(max = 32) String callerNumber) {
     }
 
     /**

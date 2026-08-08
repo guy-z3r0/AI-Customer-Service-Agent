@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Where this application's logs go, and how much of them is kept.
+
+  Until this file existed there was only the console, and separately a folder of
+  hand-written error_*.log files that nothing ever cleaned up. Two problems with
+  that: on a machine left running, the disk filled; and the transcript of a call
+  can end up in a log line — MailService writes an escalation it could not send —
+  which is a reason to know exactly how long these live and where they are.
+
+  Console stays as it was, because it is what an operator running the app in a
+  terminal reads. The file is a rolling one: a new file each day or at 10 MB,
+  seven days kept, 100 MB in total, and logback deletes the rest itself.
+-->
+<configuration>
+
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <!-- logs/ is gitignored, and stays that way: see .gitignore. -->
+        <file>logs/agent.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/agent.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>7</maxHistory>
+            <totalSizeCap>100MB</totalSizeCap>
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${FILE_LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+
+</configuration>

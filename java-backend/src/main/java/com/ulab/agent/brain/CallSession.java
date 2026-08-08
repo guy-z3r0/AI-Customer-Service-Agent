@@ -68,6 +68,10 @@ public class CallSession {
     private volatile boolean warnedAboutSilence;
     private volatile boolean busy;
 
+    /** Wrong guesses at who is calling before this call may not ask again. */
+    private static final int MAX_LOOKUP_ATTEMPTS = 3;
+
+    private final AtomicInteger failedLookups = new AtomicInteger();
     private final AtomicInteger unheard = new AtomicInteger();
     private final AtomicBoolean hangupSent = new AtomicBoolean();
 
@@ -121,6 +125,17 @@ public class CallSession {
 
     /** True the first time it is asked, so a warning is spoken once per call. */
     public boolean firstNotice() { return noticed.compareAndSet(false, true); }
+
+    /**
+     * How many times this call has failed to identify the caller.
+     *
+     * Customer codes run C001, C002, C003, so a line that answers an unlimited
+     * number of guesses is a way of reading the customer list one code at a
+     * time. Three wrong answers and this call stops being able to ask.
+     */
+    public int recordFailedLookup() { return failedLookups.incrementAndGet(); }
+
+    public boolean lookupsExhausted() { return failedLookups.get() >= MAX_LOOKUP_ATTEMPTS; }
 
     // ---------------------------------------------------- ending the call --
 

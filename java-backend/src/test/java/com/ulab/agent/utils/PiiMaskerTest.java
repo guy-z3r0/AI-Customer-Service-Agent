@@ -72,6 +72,41 @@ class PiiMaskerTest {
         assertFalse(masked.contains("1990123456789"));
     }
 
+    // The eight rows SECURITY-AUDIT.md SEC-011 proved were passing straight
+    // through into the summary request and the escalation email.
+
+    @Test
+    void aPaymentCardIsMaskedHoweverItIsSpaced() {
+        assertEquals("My card is " + PiiMasker.CARD,
+                PiiMasker.mask("My card is 4111 1111 1111 1111"));
+        assertEquals("Visa " + PiiMasker.CARD + " exp 12/28",
+                PiiMasker.mask("Visa 4111111111111111 exp 12/28"));
+        assertEquals("CVV 123 and card " + PiiMasker.CARD,
+                PiiMasker.mask("CVV 123 and card 5500005555555559"));
+    }
+
+    @Test
+    void aLongAccountNumberIsMasked() {
+        assertEquals("account number " + PiiMasker.ACCOUNT,
+                PiiMasker.mask("account number 12345678901234567890"));
+    }
+
+    @Test
+    void anIbanIsMasked() {
+        assertEquals("IBAN " + PiiMasker.ACCOUNT,
+                PiiMasker.mask("IBAN GB29NWBK60161331926819"));
+    }
+
+    @Test
+    void aNumberThatIsNotACardSurvivesEvenAtCardLength() {
+        // Sixteen digits that fail the checksum are an order or invoice number.
+        // Masking those would leave the agent unable to answer about them.
+        String reference = "invoice 4111111111111112";
+        assertEquals(PiiMasker.ACCOUNT, PiiMasker.mask(reference).split(" ")[1],
+                "16+ digits are still treated as an account, just not as a card");
+        assertEquals("order 4471 please", PiiMasker.mask("order 4471 please"));
+    }
+
     @Test
     void nothingIsInventedFromNothing() {
         assertEquals("", PiiMasker.mask(""));

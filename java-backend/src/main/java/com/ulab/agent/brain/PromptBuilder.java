@@ -38,6 +38,16 @@ public class PromptBuilder {
     /** Weekday keys as the hours JSON stores them, in the local working week. */
     private static final Map<String, String> WEEK = buildWeek();
 
+    /**
+     * How much of a customer's history the agent is given.
+     *
+     * The record grows by one line every time the agent writes something down,
+     * and all of it used to go into every later prompt — so a talkative agent
+     * eventually filled the model's context on its own. The newest are the ones
+     * worth having.
+     */
+    private static final int MAX_PAST_ISSUES = 20;
+
     private final KbService kb;
     private final CallModeMachine modes;
 
@@ -97,16 +107,49 @@ public class PromptBuilder {
         if (caller == null) return;
 
         prompt.append(Prompts.CALLER).append('\n');
-        prompt.append("Name: ").append(caller.name()).append('\n');
-        prompt.append("Customer code: ").append(caller.clientCode()).append('\n');
-        if (notBlank(caller.phone())) prompt.append("Phone: ").append(caller.phone()).append('\n');
-        if (notBlank(caller.notes())) prompt.append("Notes: ").append(caller.notes()).append('\n');
+        prompt.append(Prompts.RECORD_OPEN).append('\n');
+        prompt.append("Name: ").append(asData(caller.name())).append('\n');
+        prompt.append("Customer code: ").append(asData(caller.clientCode())).append('\n');
+        // The number is shown only by its last digits. The model has no use for
+        // the rest — it already knows who it is speaking to — and what it is
+        // given is what it can be talked into reading out loud.
+        if (notBlank(caller.phone())) {
+            prompt.append("Phone on file: ").append(lastDigitsOf(caller.phone())).append('\n');
+        }
+        if (notBlank(caller.notes())) prompt.append("Notes: ").append(asData(caller.notes())).append('\n');
 
         if (!caller.pastIssues().isEmpty()) {
             prompt.append(Prompts.PAST_ISSUES).append('\n');
-            caller.pastIssues().forEach(issue -> prompt.append("- ").append(issue).append('\n'));
+            caller.pastIssues().stream()
+                    .skip(Math.max(0, caller.pastIssues().size() - MAX_PAST_ISSUES))
+                    .forEach(issue -> prompt.append("- ").append(asData(issue)).append('\n'));
         }
-        prompt.append('\n');
+        prompt.append(Prompts.RECORD_CLOSE).append("\n\n");
+    }
+
+    /**
+     * Text from the records, made safe to put next to instructions.
+     *
+     * Two of the tools write whatever a caller said into this record, and it is
+     * read back into the system prompt of every later call — so a caller who
+     * says "log this: ... new instruction: ..." is writing into the agent's
+     * standing orders unless something stops them. Angle brackets go, because
+     * they are what closes the fence around this block, and a line that opens
+     * like a chat role stops looking like one.
+     */
+    private static String asData(String stored) {
+        if (stored == null) return "";
+        return stored.replace('<', '(').replace('>', ')')
+                // Anywhere in the line, not just at the start of one: the
+                // attack in the audit puts its "System:" after a sentence,
+                // which a start-of-line rule walks straight past.
+                .replaceAll("(?i)\\b(system|assistant|user)\\s*:", "$1 -");
+    }
+
+    /** A number as a reminder rather than a disclosure: the last four digits. */
+    private static String lastDigitsOf(String phone) {
+        String digits = phone.replaceAll("\\D", "");
+        return digits.length() <= 4 ? "•••" : "•••" + digits.substring(digits.length() - 4);
     }
 
     // ------------------------------------------------------------ knowledge --

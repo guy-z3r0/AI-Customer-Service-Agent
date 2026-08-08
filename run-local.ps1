@@ -61,14 +61,38 @@ Write-Host ""
 # Maven looks for "…\jdk-21 \bin\java.exe" and reports that JAVA_HOME is not
 # defined correctly — while pointing at a path that looks perfectly right.
 Write-Host "Starting the backend and its database..." -ForegroundColor Cyan
+# --- The operator login ---------------------------------------------------
+# Both processes need the same pair: the backend to check it, the voice server
+# to present it. Taken from .env when it is there, and otherwise generated for
+# this run — so the stack still starts with no configuration, and still starts
+# locked rather than open.
+$panelUser = "operator"
+$panelPassword = ""
+$envFile = Join-Path $root ".env"
+if (Test-Path $envFile) {
+    Get-Content $envFile | ForEach-Object {
+        if ($_ -match '^\s*PANEL_USER\s*=\s*(.+?)\s*$') { $panelUser = $Matches[1] }
+        if ($_ -match '^\s*PANEL_PASSWORD\s*=\s*(.+?)\s*$') { $panelPassword = $Matches[1] }
+    }
+}
+if (-not $panelPassword) {
+    $bytes = New-Object 'System.Byte[]' 18
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    $panelPassword = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+','-').Replace('/','_')
+    Write-Host ""
+    Write-Host "No PANEL_PASSWORD in .env — generated one for this run:" -ForegroundColor Yellow
+    Write-Host "    $panelUser / $panelPassword" -ForegroundColor Yellow
+    Write-Host "  The browser will ask for it. Put it in .env to keep it."
+}
+
 $backend = Start-Process -PassThru -FilePath "cmd.exe" -ArgumentList @(
-    "/k", "title AI Agent - backend && set `"JAVA_HOME=$jdk`" && mvn clean spring-boot:run -Dspring-boot.run.profiles=dev"
+    "/k", "title AI Agent - backend && set `"JAVA_HOME=$jdk`" && set `"PANEL_USER=$panelUser`" && set `"PANEL_PASSWORD=$panelPassword`" && mvn clean spring-boot:run -Dspring-boot.run.profiles=dev"
 ) -WorkingDirectory (Join-Path $root "java-backend")
 
 # --- The voice server --------------------------------------------------------
 Write-Host "Starting the voice server..." -ForegroundColor Cyan
 $voice = Start-Process -PassThru -FilePath "cmd.exe" -ArgumentList @(
-    "/k", "title AI Agent - voice && set `"JAVA_BASE_URL=http://127.0.0.1:8080`" && python -m uvicorn server:app --host 127.0.0.1 --port 8090"
+    "/k", "title AI Agent - voice && set `"JAVA_BASE_URL=http://127.0.0.1:8080`" && set `"PANEL_USER=$panelUser`" && set `"PANEL_PASSWORD=$panelPassword`" && python -m uvicorn server:app --host 127.0.0.1 --port 8090"
 ) -WorkingDirectory (Join-Path $root "python-voice")
 
 # --- Wait for the panel, then open it ----------------------------------------
@@ -82,7 +106,9 @@ $ready = $false
 foreach ($attempt in 1..240) {
     Start-Sleep -Seconds 2
     try {
-        $response = Invoke-WebRequest -Uri "$panel/api/health" -TimeoutSec 3 -UseBasicParsing
+        # The liveness probe, which is the one endpoint that answers without
+        # the login — everything else would come back 401 from here.
+        $response = Invoke-WebRequest -Uri "$panel/api/health/live" -TimeoutSec 3 -UseBasicParsing
         if ($response.StatusCode -eq 200) { $ready = $true; break }
     } catch { }
 }

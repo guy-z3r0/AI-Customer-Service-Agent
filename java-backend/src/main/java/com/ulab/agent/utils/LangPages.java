@@ -363,9 +363,16 @@ final class LangPages {
         m.put("dash.hint.model", pair(
                 "Paste a key in Settings and the agent starts answering.",
                 "সেটিংসে একটি কী দিন, এজেন্ট উত্তর দেওয়া শুরু করবে।"));
+        // Blunt on purpose. The credential-free recogniser posts the caller's
+        // audio to an undocumented Google endpoint through a third-party
+        // library — no contract, no retention statement, nothing to audit. An
+        // operator running a customer-service line should learn that here
+        // rather than from an audit.
         m.put("dash.hint.speech", pair(
-                "Working without a Google account. Add credentials for better speech.",
-                "গুগল অ্যাকাউন্ট ছাড়াই চলছে। ভালো স্পিচের জন্য ক্রেডেনশিয়াল দিন।"));
+                "Free fallback — the caller's audio is sent to a third-party service. "
+                        + "Add Google Cloud credentials for one with an agreement behind it.",
+                "বিনামূল্যের বিকল্প — কলারের অডিও একটি তৃতীয় পক্ষের সার্ভিসে পাঠানো হয়। "
+                        + "চুক্তিসহ সার্ভিসের জন্য গুগল ক্লাউড ক্রেডেনশিয়াল দিন।"));
         m.put("dash.hint.optional", pair("Optional. Not needed for a call.",
                 "ঐচ্ছিক। কলের জন্য দরকার নেই।"));
 
@@ -409,9 +416,13 @@ final class LangPages {
 
         m.put("key.smtp_host", pair("SMTP host", "SMTP হোস্ট"));
         m.put("key.smtp_port", pair("SMTP port", "SMTP পোর্ট"));
+        m.put("key.smtp_auth", pair("Log in to the relay (true/false)",
+                "রিলে-তে লগ ইন করুন (true/false)"));
         m.put("key.smtp_username", pair("SMTP username", "SMTP ইউজারনেম"));
         m.put("key.smtp_password", pair("SMTP password", "SMTP পাসওয়ার্ড"));
         m.put("key.smtp_from", pair("Send from address", "প্রেরকের ঠিকানা"));
+        m.put("key.log_unsent_email_body", pair("Log unsent email body (true/false)",
+                "পাঠানো যায়নি এমন ইমেলের বডি লগ করুন (true/false)"));
     }
     private static String[] pair(String english, String bangla) {
         return new String[]{english, bangla};

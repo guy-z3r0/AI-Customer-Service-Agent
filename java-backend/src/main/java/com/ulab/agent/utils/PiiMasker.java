@@ -26,6 +26,8 @@ public final class PiiMasker {
     public static final String PHONE = "[MASKED_PHONE]";
     public static final String EMAIL = "[MASKED_EMAIL]";
     public static final String AMOUNT = "[MASKED_AMOUNT]";
+    public static final String CARD = "[MASKED_CARD]";
+    public static final String ACCOUNT = "[MASKED_ACCOUNT]";
 
     /** One digit in either script: 0-9 or ০-৯. */
     private static final String DIGIT = "[0-9০-৯]";
@@ -34,6 +36,13 @@ public final class PiiMasker {
     private static final int NID_OLD = 10;
     private static final int NID_BIRTH = 13;
     private static final int NID_SMART = 17;
+
+    /** What a payment card can be, from Diners at 13 to the longest at 19. */
+    private static final int CARD_MIN_DIGITS = 13;
+    private static final int CARD_MAX_DIGITS = 19;
+
+    /** Beyond this a run of digits is somebody's account, not a quantity. */
+    private static final int ACCOUNT_MIN_DIGITS = 16;
 
     private static final Pattern EMAIL_PATTERN =
             Pattern.compile("[\\w.+-]+@[\\w-]+\\.[\\w.-]*\\w");
@@ -51,6 +60,15 @@ public final class PiiMasker {
     /** Every Bangladeshi mobile number, in the form people read out. */
     private static final Pattern MOBILE_PATTERN = Pattern.compile("01[3-9][0-9]{8}");
 
+    /**
+     * An international bank account number: two letters for the country, two
+     * check digits, then up to thirty more characters. It is matched before
+     * digit runs because the letters in it would otherwise split it into
+     * fragments too short to notice.
+     */
+    private static final Pattern IBAN_PATTERN =
+            Pattern.compile("\\b[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}\\b");
+
     private PiiMasker() {
         // Static helpers only; nothing to construct.
     }
@@ -59,13 +77,15 @@ public final class PiiMasker {
      * The masked version of one caller's sentence.
      *
      * The order is not arbitrary. Email addresses go first because one can hold
-     * a long run of digits, and amounts go before bare numbers because the
+     * a long run of digits; account numbers with letters in them go next, before
+     * anything splits them apart; and amounts go before bare numbers because the
      * currency beside them is the only thing that says what the number means.
      */
     public static String mask(String text) {
         if (text == null || text.isBlank()) return text;
 
         String masked = EMAIL_PATTERN.matcher(text).replaceAll(EMAIL);
+        masked = IBAN_PATTERN.matcher(masked).replaceAll(Matcher.quoteReplacement(ACCOUNT));
         masked = AMOUNT_PATTERN.matcher(masked).replaceAll(Matcher.quoteReplacement(AMOUNT));
         return maskDigitRuns(masked);
     }
@@ -99,9 +119,43 @@ public final class PiiMasker {
 
         if (MOBILE_PATTERN.matcher(nationalForm(digits)).matches()) return PHONE;
         if (isNidLength(digits.length())) return NID;
+        // A payment card is 13 to 19 digits and its last digit is a checksum
+        // over the rest. Testing that is what separates a card from an order
+        // number of the same length, so an invoice reference survives and a
+        // Visa does not.
+        if (digits.length() >= CARD_MIN_DIGITS && digits.length() <= CARD_MAX_DIGITS
+                && passesLuhn(digits)) {
+            return CARD;
+        }
+        // Nothing harmless is this long. Bank account numbers vary too much
+        // between countries to pattern-match, so length is the only honest test.
+        if (digits.length() >= ACCOUNT_MIN_DIGITS) return ACCOUNT;
         if (run.startsWith("+") && digits.length() >= 8 && digits.length() <= 15) return PHONE;
         if (digits.startsWith("0") && digits.length() >= 9 && digits.length() <= 15) return PHONE;
         return run;
+    }
+
+    /**
+     * The checksum every payment card carries.
+     *
+     * Double every second digit from the right, subtract nine from anything
+     * over nine, and the total is divisible by ten. It is not security — it
+     * catches typing mistakes — but it is exactly the test that tells a card
+     * apart from sixteen digits that merely look like one.
+     */
+    private static boolean passesLuhn(String digits) {
+        int total = 0;
+        boolean doubling = false;
+        for (int i = digits.length() - 1; i >= 0; i--) {
+            int digit = digits.charAt(i) - '0';
+            if (doubling) {
+                digit *= 2;
+                if (digit > 9) digit -= 9;
+            }
+            total += digit;
+            doubling = !doubling;
+        }
+        return total % 10 == 0;
     }
 
     private static boolean isNidLength(int length) {

@@ -1,0 +1,21 @@
+# What must never reach this image's build context.
+#
+# Docker reads .dockerignore from the root of the build context, and compose
+# builds this service with "context: ./java-backend" — so the one at the top of
+# the repository is never consulted for it and this file is what actually
+# applies.
+
+target/
+.embedded-postgres/
+.idea/
+*.iml
+
+# The v1 JSON tree is mounted at run time by compose, never built in. It carries
+# example customer records that have no business inside an image.
+data/
+
+.env
+.env.*
+secrets/
+logs/
+*.md

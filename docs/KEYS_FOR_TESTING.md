@@ -89,15 +89,20 @@ than any demo needs.
 4. `Send from address` must be an address you have verified in Brevo — it walks
    you through it.
 
-### The one thing that will go wrong
+### Ports, and what is encrypted
 
-**Use port 587, not 465.** This app negotiates STARTTLS on a plain connection,
-which is what 587 expects. Port 465 wants the connection to be encrypted before
-a single byte is sent, and the send will simply time out. If you have already
-tried 465 and seen nothing arrive, that is why.
+**587 and 465 both work now.** 587 starts in the clear and upgrades to TLS; 465
+is encrypted from the first byte. This page used to say 465 would time out,
+which was a fact about the app rather than about SMTP, and is no longer true.
 
-If a send fails, the backend log tells you plainly — it tries twice, then prints
-the whole message it could not send, so the escalation is never silently lost.
+The upgrade on 587 is *required*, not attempted. A relay that does not offer
+STARTTLS — or an attacker who strips the offer — gets the send refused rather
+than your password and a call transcript in plain text. The certificate has to
+match the host, too.
+
+If a send fails, the backend tries twice and then writes it to the log: the
+summary, plus a count of the transcript lines it withheld. Turn on
+`Log unsent email body` in Settings while you are debugging a relay to see them.
 
 ---
 

@@ -41,6 +41,20 @@ at what is inside:
   Leave it as it is if you have no key; the voice server falls back to the free
   offline speech providers on its own.
 
+**Turn on the commit guard while you are here.** Once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+That makes git run `.githooks/pre-commit`, which refuses a commit carrying
+something that looks like a credential, or anything under `secrets/`, `.env` or
+`java-backend/data/`. It is one line and it is the control that would have
+stopped this project's worst security finding — an API key committed on day one
+and present in every commit after it. Install
+[gitleaks](https://github.com/gitleaks/gitleaks) for the thorough version; the
+hook falls back to a small pattern check without it.
+
 ---
 
 ## 3. Start the stack
@@ -124,10 +138,20 @@ The health line at the bottom should change to `Language model: … ready`.
 ### Speech recognition and the agent's voice
 
 Without any of this the app still makes calls: it falls back to the free
-offline recogniser and to whatever voices Windows or the container already has.
-Those voices are the robotic ones, and **they are almost certainly English
-only** — which is what makes Bangla sound wrong. See
+recogniser and to whatever voices Windows or the container already has. Those
+voices are the robotic ones, and **they are almost certainly English only** —
+which is what makes Bangla sound wrong. See
 [Bangla](#bangla-needs-its-own-voice) below.
+
+> **Read this before you take a real customer call on the free path.** The
+> credential-free recogniser is `SpeechRecognition.recognize_google()`, which
+> posts the caller's audio to an **undocumented Google endpoint using a public
+> key baked into that library**. There is no contract behind it, no retention
+> statement, and no way to audit what happens to the recording. It is genuinely
+> convenient for a demo and it is the wrong place to send a real customer saying
+> their national ID number out loud. Setting up the credentials below moves you
+> onto Google Cloud proper, where there is an agreement. The Dashboard says
+> which one you are on.
 
 **What you get for setting it up:** streaming recognition instead of
 record-then-send, natural Neural2 voices, and Bangla that actually sounds like
@@ -227,17 +251,27 @@ then create one at https://myaccount.google.com/apppasswords. Google shows the
 16-character password once. `Send from address` must be that same Gmail address —
 Gmail refuses to send as anyone else.
 
-**Use port 587, not 465.** This app negotiates STARTTLS on a plain connection,
-which is what 587 expects. On 465 the send simply times out. If you have tried
-465 and seen nothing arrive, that is why.
+**587 and 465 both work.** On 587 the connection starts in the clear and is
+upgraded to TLS, and the upgrade is now *required* — a server that will not do
+it gets nothing rather than your password in plain text. On 465 the connection
+is encrypted from the first byte instead. Either is fine; 587 is what the three
+relays above hand you. (Earlier versions of this page said 465 would simply time
+out. That was true of the app at the time, not of SMTP.)
 
 **Then say who receives it.** The seeded businesses list a fake escalation
 contact, so even perfect SMTP settings would send the email nowhere useful. Go
 to **Businesses → What it says → Hours & handover** and put a real address in
 *"Who takes a call the agent cannot"*.
 
-If a send fails the backend tries once more, then writes the whole message it
-could not send to the log.
+**Logging in is a setting, not a guess.** `SMTP auth` is on by default and is
+what nearly every relay wants. Turn it off only for a relay on your own network
+that takes mail from anybody and refuses a login attempt.
+
+If a send fails the backend tries once more, then writes the message to the log.
+By default that is the summary plus a count of the withheld transcript lines,
+because the body of an escalation is a whole call and application logs are not
+treated as customer records. Turn `Log unsent email body` on while you are
+debugging a relay to see the lot.
 
 **[KEYS_FOR_TESTING.md](KEYS_FOR_TESTING.md)** covers the same credentials
 oriented around the Phase 6 test script, including which test steps need which.

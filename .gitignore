@@ -27,7 +27,13 @@ logs/
 !docs/ors/logs/
 *.class
 *.lst
-java-backend/data/config.json
+
+# --- The version 1 data tree ---
+# It held a credential (config.json) and example customer records with a
+# real-looking name, phone number and gmail address in them, all committed.
+# Nothing in version 2 reads any of it except the one-shot importer, which
+# reads it off disk — so it stays on disk and out of git.
+java-backend/data/
 
 # --- Secrets & local environment ---
 # The committed *.PLACEHOLDER files show the shape; the real ones never land in git.
@@ -35,3 +41,5 @@ java-backend/data/config.json
 secrets/*
 !secrets/*.PLACEHOLDER
 java-backend/.embedded-postgres
+SECURITY-AUDIT.md
+suggested-updates.md

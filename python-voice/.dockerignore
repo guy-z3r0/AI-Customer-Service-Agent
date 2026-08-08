@@ -1,0 +1,24 @@
+# What must never reach this image's build context.
+#
+# Docker reads .dockerignore from the root of the build context, and compose
+# builds this service with "context: ./python-voice" — so the one at the top of
+# the repository is never consulted for it and this file is what actually
+# applies. The Dockerfile does "COPY . .", which on a developer's machine means
+# a virtualenv, a test cache, and whatever else was left in the folder.
+
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+
+# Tests are run before the image is built, not inside it.
+tests/
+
+# Nothing here holds a credential today, and this is how it stays that way.
+.env
+.env.*
+secrets/
+logs/
+*.md

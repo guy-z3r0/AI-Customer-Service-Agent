@@ -83,6 +83,18 @@ class VoiceSession:
         # being heard. Everything that means "the agent has stopped" waits for it.
         self._speech_ends_at = 0.0
 
+        # Sentences queued but not yet spoken, and whether the brain has said
+        # its turn is finished. The turn ends when both are true — see
+        # _maybe_end_of_turn for why counting beats checking the queue.
+        self._outstanding = 0
+        self._last_seen = False
+
+        # Somewhere to keep a strong reference to every background task. The
+        # event loop holds only a weak one, so a task nobody is holding can be
+        # collected before it finishes — and each of these carries a line of the
+        # caller's speech up to the brain.
+        self._pending: set[asyncio.Task] = set()
+
     # ------------------------------------------------------------ lifecycle --
 
     async def start(self, language: str | None = None) -> None:
@@ -194,7 +206,7 @@ class VoiceSession:
         """A guess at what is being said. Shown live, never stored."""
         if self._closed or not text:
             return
-        asyncio.create_task(self._tell_brain({"type": "transcript_partial", "text": text}))
+        self._in_background(self._tell_brain({"type": "transcript_partial", "text": text}))
 
     def _on_final(self, text: str, t_stt_final: float) -> None:
         """The caller finished a sentence. The brain decides what follows."""
@@ -207,7 +219,7 @@ class VoiceSession:
             # listening in one language does to a sentence in two.
             log.info("[%s] nothing recognised in that utterance", self.call_id)
             self._endpointer.reset()
-            asyncio.create_task(self._tell_brain({
+            self._in_background(self._tell_brain({
                 "type": "transcript_final",
                 "text": "",
                 "language": self.language,
@@ -217,7 +229,7 @@ class VoiceSession:
 
         self._turn_seq += 1
         log.info("[%s] turn %d — caller said %r", self.call_id, self._turn_seq, text[:80])
-        asyncio.create_task(self._tell_brain({
+        self._in_background(self._tell_brain({
             "type": "transcript_final",
             "text": text,
             "language": self.language,
@@ -285,6 +297,9 @@ class VoiceSession:
         if not self._agent_speaking:
             self._agent_speaking = True
             await self._send_json({"type": "agent_state", "speaking": True})
+        self._outstanding += 1
+        if last:
+            self._last_seen = True
         await self._say_queue.put({"seq": seq, "text": text or "", "last": last,
                                    "language": (language or self.language).lower()})
 
@@ -302,9 +317,27 @@ class VoiceSession:
             except Exception as e:
                 log.warning("[%s] could not speak the reply: %s", self.call_id, e)
                 await self._send_json({"type": "error", "code": "tts_failed", "msg": str(e)})
+            finally:
+                self._outstanding -= 1
 
-            if item["last"] and self._say_queue.empty():
-                await self._end_of_turn()
+            await self._maybe_end_of_turn()
+
+    async def _maybe_end_of_turn(self) -> None:
+        """End the turn once the last sentence has been said and none are left.
+
+        This used to read `item["last"] and self._say_queue.empty()`, asked of
+        each sentence as it finished. A sentence still waiting behind the one
+        marked last answers the second question "no" — and that sentence is not
+        itself marked last, so it answers the first "no" too. Neither ends the
+        turn and nothing ever does: the microphone stays shut, the brain's
+        silence clock never starts, and the call sits there.
+
+        Counting what has been handed over against what has been spoken has no
+        such gap to fall down.
+        """
+        if self._last_seen and self._outstanding == 0:
+            self._last_seen = False
+            await self._end_of_turn()
 
     async def _speak_one(self, item: dict) -> None:
         text = item["text"].strip()
@@ -367,6 +400,19 @@ class VoiceSession:
     async def _tell_brain(self, payload: dict) -> None:
         if self._link is not None:
             await self._link.send(payload)
+
+    def _in_background(self, coroutine) -> None:
+        """Run something now, from a place that cannot await it.
+
+        The recogniser's callbacks arrive on the event loop but are ordinary
+        functions, so the only way to send their result onward is a task. Python
+        documents that the loop keeps a weak reference to a task, so one that
+        nobody else holds may be garbage-collected before it runs — silently
+        losing a line of the caller's speech. The set is that reference.
+        """
+        task = asyncio.create_task(coroutine)
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
 
     def _line(self, key: str) -> str:
         return self.strings.get(key) or FALLBACK_LINES.get(key, "")

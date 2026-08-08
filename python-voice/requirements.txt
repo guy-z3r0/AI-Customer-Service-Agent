@@ -1,27 +1,39 @@
 # The voice server. Audio arrives over a WebSocket, so nothing here touches a
 # local microphone — PyAudio from version 1 is gone on purpose.
+#
+# Pinned exactly, and reviewed rather than left: the versions below are the ones
+# the tests are actually run against. `pip-audit --requirement requirements.txt`
+# checks them against the vulnerability database, and CI does that on every push
+# — see .github/workflows/dependency-scan.yml.
 
-fastapi==0.115.6
-uvicorn[standard]==0.32.1
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
 
 # Speech, when Google Cloud credentials exist.
-google-cloud-speech==2.28.0
-google-cloud-texttospeech==2.21.1
+google-cloud-speech==2.40.0
+google-cloud-texttospeech==2.37.0
 
 # Voice activity detection: decides when the caller has stopped talking.
-# Same C library either way; the -wheels fork is the one that ships a prebuilt
-# Windows binary, so a laptop without Visual C++ build tools can still install it.
-webrtcvad==2.0.10; platform_system != "Windows"
-webrtcvad-wheels==2.0.14; platform_system == "Windows"
+#
+# The -wheels fork, on every platform. It is the same C library as webrtcvad;
+# what it adds is prebuilt binaries — a Windows one, so a laptop without Visual
+# C++ build tools can install it, and a manylinux one, which is what the
+# container needs. This used to be split by platform, with plain webrtcvad on
+# Linux, and that is why `docker compose up` had never worked: webrtcvad has no
+# Linux wheel, python:3.11-slim has no compiler, and the image build stopped
+# there.
+webrtcvad-wheels==2.0.14
 
 # Resampling 48 kHz browser audio down to the 16 kHz the recognisers want.
-numpy==1.26.4
+numpy==2.4.2
 
 # Talking to the Java backend: settings and wording over HTTP, and one
 # websocket per call carrying the conversation itself.
-requests==2.32.3
-websockets==13.1
+requests==2.34.2
+websockets==17.0.1
 
 # The free fallback pair, kept from version 1 so a demo never needs a key.
-SpeechRecognition==3.10.4
-pyttsx3==2.90
+# pyttsx3 was picked up again after five quiet years; 2.99 is a live release,
+# not the 2020 one this used to pin.
+SpeechRecognition==3.17.0
+pyttsx3==2.99

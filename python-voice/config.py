@@ -9,6 +9,7 @@ The one thing this file does own is how to find Java, which comes from the
 environment because it differs between Docker and a laptop.
 """
 
+import base64
 import logging
 import os
 
@@ -22,6 +23,26 @@ LANG_URL = JAVA_BASE_URL + "/api/lang"
 CALL_URL = JAVA_BASE_URL + "/api/call"
 
 REQUEST_TIMEOUT_S = 3
+
+# The backend requires the operator login on everything except the Twilio
+# webhook, so the voice server has to sign in like anything else. Same
+# credentials as the panel; run-local.ps1 and docker compose pass both.
+PANEL_USER = os.environ.get("PANEL_USER", "operator")
+PANEL_PASSWORD = os.environ.get("PANEL_PASSWORD", "")
+
+
+def java_auth() -> tuple[str, str] | None:
+    """Credentials for calling Java, or None when none were provided."""
+    return (PANEL_USER, PANEL_PASSWORD) if PANEL_PASSWORD else None
+
+
+def java_auth_header() -> dict:
+    """The same credentials as a header, for the websocket handshake."""
+    if not PANEL_PASSWORD:
+        return {}
+    encoded = base64.b64encode(
+        f"{PANEL_USER}:{PANEL_PASSWORD}".encode("utf-8")).decode("ascii")
+    return {"Authorization": "Basic " + encoded}
 
 DEFAULTS = {
     "stt_provider": "auto",
@@ -95,7 +116,7 @@ def fetch(session=requests) -> VoiceConfig:
     """Ask Java for the current settings; fall back to the defaults if it is down."""
     values = dict(DEFAULTS)
     try:
-        response = session.get(CONFIG_URL, timeout=REQUEST_TIMEOUT_S)
+        response = session.get(CONFIG_URL, timeout=REQUEST_TIMEOUT_S, auth=java_auth())
         response.raise_for_status()
         for entry in response.json():
             # Secrets come back masked, which is fine — the voice server needs
@@ -110,7 +131,8 @@ def fetch(session=requests) -> VoiceConfig:
 def fetch_strings(language: str = "en", session=requests) -> dict:
     """The spoken and displayed wording, which lives in Java's Lang.java."""
     try:
-        response = session.get(LANG_URL, params={"lang": language}, timeout=REQUEST_TIMEOUT_S)
+        response = session.get(LANG_URL, params={"lang": language},
+                               timeout=REQUEST_TIMEOUT_S, auth=java_auth())
         response.raise_for_status()
         return response.json()
     except (requests.RequestException, ValueError) as e:
