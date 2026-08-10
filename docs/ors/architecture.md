@@ -29,6 +29,7 @@ graph TD
 
     subgraph JavaBackend["java-backend"]
         RestApi["REST controllers<br/>CRUD + call control"]
+        MediaRelay["TwilioMediaSocket<br/>one public host, frames passed through"]
         LiveFeed["LiveEventSocket<br/>transcript + events to panel"]
         Brain["ConversationBrain<br/>turns, LLM calls, tool dispatch"]
         ModeMachine["CallModeMachine<br/>4-way screening"]
@@ -52,7 +53,8 @@ graph TD
     LiveFeed -->|live transcript, mode, latency| Panel
     CallClient -->|mic audio WS| Transports
     CallClient -.->|Twilio Device mode| Twilio
-    Twilio -.->|Media Streams| Transports
+    Twilio -.->|Media Streams| MediaRelay
+    MediaRelay -.->|relayed, unread| Transports
     Transports --> Pipeline
     Pipeline -->|final transcript, per-call WS| Brain
     Brain -->|streamed reply sentences| Pipeline
@@ -77,7 +79,7 @@ graph TD
     classDef util fill:#6B2438,stroke:#FF5C7A,stroke-width:2px,color:#FFFFFF
 
     class Panel,CallClient ui
-    class Transports,Pipeline,RestApi,LiveFeed,Brain,ModeMachine,PromptBuilder,PostCall,DomainSvc core
+    class Transports,Pipeline,RestApi,MediaRelay,LiveFeed,Brain,ModeMachine,PromptBuilder,PostCall,DomainSvc core
     class Repos,PG data
     class Gemini,GCP,Twilio,SMTP external
     class PiiMasker util
@@ -98,7 +100,8 @@ LiveEventSocket, so the transcript scrolls live with latency badges per turn.
 
 In Twilio mode the front half changes and nothing else does: the Live Call page uses the
 Twilio Device SDK, Twilio dials in, and its Media Streams WebSocket lands on the same
-transport layer.
+transport layer — by way of the backend, which serves `/ws/twilio` itself and relays the
+frames on, so a telephone call needs one public address rather than two.
 
 When the call ends — hangup, spam termination, or inactivity — the brain hands the finished
 transcript to PostCallService, which asks Gemini for a structured summary, emails the
@@ -504,6 +507,35 @@ Three rules set here:
   a counter that resets when it re-prompts can never reach anything. Two asks, then goodbye.
 - **The model is asked, not relied on, for what can be measured.** Which language a caller is
   speaking is written in their words; the agent follows that whether or not the model notices.
+
+## What the one-tunnel fix changed
+
+Not a phase either — one fault, and it is not in the code but in what the code assumed the
+world would provide. A telephone call needs two things reachable from the internet: the
+webhook, on the backend's 8080, and the media stream, which pointed at the voice server's
+8090. A free ngrok account issues one hostname, so asking for two tunnels gets one, and half
+of Twilio's traffic arrives at the wrong service.
+
+```
+  before                                   after
+  Twilio ─┬─ tunnel A ─▶ 8080 /api/twilio/voice     Twilio ─┬─ one tunnel ─▶ 8080 /api/twilio/voice
+          └─ tunnel B ─▶ 8090 /ws/twilio                    └──────────────▶ 8080 /ws/twilio
+             ↑ a free plan has no tunnel B                                        │ relayed, unread
+                                                            8090 /ws/twilio ◀──────┘  private network
+```
+
+| Layer | Added or changed |
+|---|---|
+| `api/` | `TwilioMediaSocket` — one outbound client socket per inbound call, text frames passed through in both directions, either end closing the other. `WsConfig` mounts it at `/ws/twilio`; `SecurityConfig` opens that path, because a handshake refused with 401 never reaches a handler |
+| `python-voice/` | nothing. `transports/twilio_ws.py` cannot tell whether Twilio dialled it directly |
+
+One rule set here:
+
+- **A relay that understands the protocol is a second implementation of it.** This one reads
+  nothing it carries and holds no call state, so there is no version of it that can fall
+  behind the two real ends. What it does own is the pair: a half-open socket would leave
+  Twilio pushing a whole call's audio into nothing, so whichever end goes first closes the
+  other.
 
 ## Panel screens in contract parts
 

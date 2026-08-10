@@ -311,3 +311,10 @@ configured. When you get there you will need a Twilio account
 (**https://www.twilio.com/try-twilio**) and ngrok (**https://ngrok.com/download**)
 so Twilio can reach your machine from the internet. Leave all seven Twilio
 settings on their placeholders until then — they are supposed to be amber.
+
+**One tunnel is enough**, and a free ngrok account only ever gives you one:
+`ngrok http 8080`, the panel's port. Twilio's webhook and its audio both arrive
+there, because the backend relays the audio on to the voice server itself over
+the private network. **Public media URL** is that single public host — the same
+one you give the TwiML App — not the voice server's own address.
+[SETUP.md](SETUP.md) §5 has the walkthrough.

@@ -28,11 +28,16 @@ import java.util.Base64;
  * and it stopped being one the moment Phase 7 put an ngrok tunnel in front of
  * it, because ngrok forwards the whole host, not one path.
  *
- * Two things are deliberately left open:
+ * Three things are deliberately left open:
  *
  *  - {@code /api/twilio/voice}, because Twilio has to reach it and cannot log
  *    in. It is not unprotected: it proves who it is with a signature instead,
  *    which is checked before anything is opened or spoken.
+ *  - {@code /ws/twilio}, the media stream that webhook then points at. Twilio's
+ *    media servers cannot log in either, and a websocket handshake refused with
+ *    a 401 never reaches the handler at all. What a stranger gets by opening it
+ *    is a relay to the voice server, which refuses any stream that does not
+ *    name a call it opened.
  *  - {@code /api/health/live}, a bare "is the process up" for the container
  *    health check. It says nothing about what is configured — the detailed
  *    health that lists unset credentials needs the login.
@@ -69,7 +74,8 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .authorizeHttpRequests(routes -> routes
-                        .requestMatchers("/api/twilio/voice", "/api/health/live").permitAll()
+                        .requestMatchers("/api/twilio/voice", "/ws/twilio", "/api/health/live")
+                        .permitAll()
                         .anyRequest().authenticated())
                 .httpBasic(Customizer.withDefaults())
                 // No session is created here, and no cookie is set — every

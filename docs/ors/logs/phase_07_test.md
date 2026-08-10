@@ -24,13 +24,13 @@ behaving with no Twilio credentials at all.
 cd java-backend && mvn clean package
 ```
 
-*Expected:* `BUILD SUCCESS`, `Tests run: 59, Failures: 0, Errors: 0`.
+*Expected:* `BUILD SUCCESS`, `Tests run: 153, Failures: 0, Errors: 0`.
 
 ```bash
 cd python-voice && python -m pytest
 ```
 
-*Expected:* `22 passed`.
+*Expected:* `51 passed`.
 
 **2.** Start the stack and watch the log.
 
@@ -104,7 +104,10 @@ the phase to pass.
 
 **9.** Follow the Twilio and ngrok walkthrough in
 [docs/SETUP.md](../../SETUP.md#optional-twilio-for-calls-over-a-real-telephone-line),
-fill in all seven settings, and reload the Live Call page.
+fill in all seven settings, and reload the Live Call page. **One tunnel**,
+`ngrok http 8080`, and that one host goes in both **Public media URL** and the
+TwiML App's request URL — the backend now relays the audio to the voice server
+itself, so 8090 stays private.
 
 *Expected:* the **Twilio call** button is now enabled and its tooltip is gone.
 
@@ -118,7 +121,10 @@ not this app.
 
 *If the call connects and then goes silent:* the **Public media URL** is stale.
 ngrok gives a new address every restart on the free plan, and this is the single
-most common cause.
+most common cause. Next most likely is that it disagrees with the host on the
+TwiML App — they are now the same one address. The backend logs
+`Relaying a Twilio media stream to …` the moment Twilio's audio arrives, so if
+that line is absent, Twilio never reached it.
 
 ---
 

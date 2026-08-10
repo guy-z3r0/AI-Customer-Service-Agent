@@ -287,16 +287,30 @@ ngrok (https://ngrok.com/download). ngrok is not optional — Twilio's media
 stream has to reach your machine from the internet, and your machine is behind
 a router.
 
-**1. Start ngrok** against the voice server, not the panel:
+**1. Start one ngrok tunnel**, against the panel's port:
 
 ```bash
-ngrok http 8090
+ngrok http 8080
 ```
 
 Copy the forwarding host it prints — the `abc123.ngrok-free.app` part, without
-`https://`. That goes in **Public media URL**. It changes every time you restart
+`https://`. That one host goes in two places: **Public media URL** in Settings,
+and the TwiML App's request URL in step 2. It changes every time you restart
 ngrok on a free account, and a stale one is the single most common reason a
 Twilio call connects and then goes silent.
+
+**One tunnel, not two.** Twilio needs two things from your machine: the webhook
+that answers a connecting call, and the websocket that carries its audio. Both
+are served by the backend on 8080 — the audio arrives at `/ws/twilio` and the
+backend passes every frame through to the voice server over the private network,
+so 8090 never has to be public at all. ngrok's free plan grants one hostname at
+a time, which is exactly what this needs.
+
+**Public media URL** therefore means *your one public host*, the same one the
+webhook arrives on. (Earlier versions of this page said it was the voice
+server's own address and told you to run a second tunnel for the webhook. A free
+ngrok account cannot do that — the two tunnels collapse onto one hostname and
+Twilio's requests land on whichever service answers.)
 
 **2. In the Twilio console** (https://console.twilio.com/):
 
@@ -315,12 +329,9 @@ path, with the method **POST**:
 https://abc123.ngrok-free.app/api/twilio/voice
 ```
 
-Note that this one points at ngrok forwarding to **8080**, the panel, while the
-media URL points at **8090**, the voice server. If you only want to run one
-ngrok tunnel, point it at 8080 and put your backend behind it — but two tunnels
-is simpler to reason about, and ngrok's free plan allows one at a time, so most
-people run the media tunnel and use a paid plan or a second machine for the
-webhook.
+Same host as **Public media URL**, because there is only one. If those two ever
+disagree, one of them is stale — that is worth checking first when a call
+connects and nothing is said.
 
 **3. Paste all seven values into Settings** and save. Reload the Live Call page:
 the **Twilio call** button is now enabled. Press it and the call runs through

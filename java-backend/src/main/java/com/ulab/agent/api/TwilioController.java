@@ -35,9 +35,10 @@ import java.util.UUID;
  *
  * Two endpoints, and they are called by two different things. The panel asks
  * for a token so the Twilio SDK in the page can register as a device; Twilio
- * itself asks for TwiML the moment a call connects, and is told to point its
- * Media Streams websocket at the voice server. After that the call is the same
- * call as any other — same transport layer, same brain, same knowledge base.
+ * itself asks for TwiML the moment a call connects, and is told to open its
+ * Media Streams websocket back at this server, which relays it to the voice
+ * server ({@link TwilioMediaSocket}). After that the call is the same call as
+ * any other — same transport layer, same brain, same knowledge base.
  *
  * Nothing here needs the Twilio SDK. An access token is a JSON Web Token with
  * a particular set of claims, signed with the API key secret, and minting one
@@ -251,6 +252,11 @@ public class TwilioController {
      * The setting holds a public hostname — an ngrok address in a demo —
      * because the scheme is not the operator's choice: a media stream is always
      * wss, whatever they pasted in.
+     *
+     * That host is now this server's own, the same one this webhook arrived on,
+     * because /ws/twilio is served here and relayed onward. It is unchanged
+     * from when it named the voice server directly: one public host answering
+     * both is precisely what a single tunnel can provide.
      */
     private String mediaStreamUrl() {
         String host = config.getString("public_media_url", "")

@@ -18,10 +18,12 @@ public class WsConfig implements WebSocketConfigurer {
 
     private final LiveEventSocket liveEvents;
     private final TurnSocket turns;
+    private final TwilioMediaSocket twilioMedia;
 
-    public WsConfig(LiveEventSocket liveEvents, TurnSocket turns) {
+    public WsConfig(LiveEventSocket liveEvents, TurnSocket turns, TwilioMediaSocket twilioMedia) {
         this.liveEvents = liveEvents;
         this.turns = turns;
+        this.twilioMedia = twilioMedia;
     }
 
     @Override
@@ -30,5 +32,9 @@ public class WsConfig implements WebSocketConfigurer {
         // The voice server is a program, not a page, so it sends no Origin
         // header and the same-origin rule lets it through untouched.
         registry.addHandler(turns, "/ws/turn/*");
+        // Twilio's media servers are the same kind of client, and this is the
+        // one address they need: it relays on to the voice server itself, so a
+        // telephone call needs only one public tunnel rather than two.
+        registry.addHandler(twilioMedia, "/ws/twilio");
     }
 }

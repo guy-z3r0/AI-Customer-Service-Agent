@@ -93,6 +93,21 @@ class ApiRequiresLoginTest {
     }
 
     @Test
+    void theTwilioMediaStreamIsNotBlockedByTheLogin() throws Exception {
+        // The webhook hands Twilio a wss address on this same host, and Twilio's
+        // media servers have no more credentials than its webhook does. A 401
+        // here refuses the handshake before the relay is ever reached, which
+        // looks from the outside like a call that connects and stays silent.
+        mvc.perform(get("/ws/twilio"))
+                .andExpect(result -> {
+                    if (result.getResponse().getStatus() == 401) {
+                        throw new AssertionError("the media stream is behind the login, "
+                                + "so no Twilio call can carry audio");
+                    }
+                });
+    }
+
+    @Test
     void theTwilioWebhookIsNotBlockedByTheLogin() throws Exception {
         // Twilio cannot log in either, so it is let through the filter chain
         // and made to prove itself with a signature instead — TwilioSecurityTest

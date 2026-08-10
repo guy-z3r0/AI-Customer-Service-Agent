@@ -37,6 +37,7 @@ need a credential, a microphone or Docker, not more code.
   → every phase has its log and test script in `docs/ors/logs/`
 
 ## Since Phase 7 was written — six fixes from Nanjiba's own testing
+*(and a seventh at the end of this list, added after the turn-taking pass below)*
 - **Silence was measured from the wrong moment.** The clock ran from when the call
   connected, while the agent was still reading the greeting, so a 15/30 setting warned after
   ~3 seconds of real silence and hung up after ~18. The voice server now reports `agent_done`
@@ -54,6 +55,15 @@ need a credential, a microphone or Docker, not more code.
   screening mode is untouched, because what the machine decided is still a fact about the call.
 - **SETUP.md** now carries the speech, voice, email and telephony walkthroughs in full, plus
   the call-behaviour timings.
+- **A Twilio call needed two public tunnels, and a free ngrok account has one.** The webhook
+  wants 8080 and the media stream wanted 8090; asked for two, ngrok gives one hostname and the
+  second tunnel quietly lands on the first, so Twilio's requests reach the wrong service. The
+  backend now serves `/ws/twilio` itself (`api/TwilioMediaSocket`) and relays every frame,
+  unread, to the voice server's own `/ws/twilio` over the Docker network — so one tunnel at
+  8080 carries both, and **Public media URL** now means "your one public host". `twilio_ws.py`
+  is untouched and cannot tell the difference. Both close directions and an unreachable voice
+  server were exercised against a running backend with a stand-in on 8090; a real Twilio call
+  still has not been placed.
 
 ## Since then — nine more faults from live calls, all fixed
 Seven of the nine turned out to be one question asked in different places: **who has the
@@ -110,13 +120,14 @@ its place — it speaks with voices `pyttsx3` refuses outright, verified against
 — but it cannot conjure a language Windows does not have.
 
 ## In progress
-Nothing. Waiting for Nanjiba to run `phase_07_test.md` and `turn_taking_test.md`, and approve.
+Nothing. Waiting for Nanjiba to run `phase_07_test.md`, `turn_taking_test.md` and
+`one_tunnel_test.md`, and approve.
 
 ## Blocked
 Nothing blocked.
 
 ## Next action
-**Approval gate.** Two scripts now.
+**Approval gate.** Three scripts now.
 
 1. `docs/ors/logs/turn_taking_test.md`, which covers the nine faults above. Steps 5 (a reply
    that is not cut off), 7 (an agent that does not talk over you) and 9 (a call that ends
@@ -124,9 +135,14 @@ Nothing blocked.
    to `secrets/gcp-credentials.json` before section E** — that one rename is what turns Bangla
    on.
 2. `docs/ors/logs/phase_07_test.md`, steps 1–15, unchanged except that step 1 now expects
-   148 Java tests and 51 Python. Steps 4 (a second business answering as itself), 7 (a
+   153 Java tests and 51 Python. Steps 4 (a second business answering as itself), 7 (a
    stranger no longer mistaken for a customer) and 11 (everything behaving with no Twilio
-   credentials) decide that one.
+   credentials) decide that one. **Steps 9–10 now need only one ngrok tunnel**, pointed at
+   8080, with that same host in both Public media URL and the TwiML App's request URL.
+3. `docs/ors/logs/one_tunnel_test.md`, new: Twilio over that single tunnel. Steps 4 (one
+   tunnel carrying both the webhook and the audio) and 6 (a real call, with the voice
+   server's own log unchanged) decide it. **This is the script no part of the project has
+   ever passed** — it is where a telephone is met for the first time.
 
 After that the project is built, and what is left is the definition-of-done sitting:
 
@@ -167,10 +183,11 @@ After that the project is built, and what is left is the definition-of-done sitt
   apply, and both run as uid 10001 rather than root.
 - **The test suite had never actually run on this machine.** Mockito's Byte Buddy did not
   understand Java 25's class files, so the fourteen login tests and both other security suites
-  errored before executing. `byte-buddy.version` is pinned to 1.18.0. **148 Java tests and 51
+  errored before executing. `byte-buddy.version` is pinned to 1.18.0. **153 Java tests and 51
   Python now pass**, up from 119 and 32 — the turn-taking pass added `CallEndsItselfTest`,
   `InactivityWatchdogTest`, `LanguageSenseTest`, `SlangGuardTest`,
-  `test_talking_over_each_other.py` and `test_voice_choices.py`.
+  `test_talking_over_each_other.py` and `test_voice_choices.py`, and the one-tunnel fix added
+  `TwilioRelayTest` plus a case in `ApiRequiresLoginTest`.
 - `spring.jpa.hibernate.ddl-auto` is now `validate` (WARN-002). Flyway still owns the schema;
   Hibernate checks it at boot and refuses to start if an entity has drifted from a migration.
 - **Running two backends at once still breaks the database, but for one reason now instead of
@@ -187,7 +204,9 @@ After that the project is built, and what is left is the definition-of-done sitt
   `brain/CallInterventions.java`, `brain/Greeter.java`, `brain/LanguageSense.java`,
   `utils/SlangGuard.java`, `python-voice/pipeline/tts_windows.py` and
   `static/js/pages/call_stats.js` — the first two are `ConversationBrain` split at 532 lines to
-  get back under the 500-line cap, and the last is `live_call.js` for the same reason.
+  get back under the 500-line cap, and the last is `live_call.js` for the same reason. The
+  one-tunnel fix added `api/TwilioMediaSocket.java`, which BUILD_SPEC could not have listed:
+  it exists because of what a free ngrok account will not do.
 - Dependencies added across the whole project: `spring-boot-starter-test` (test scope) and
   `websockets` on the Python side. **No Twilio library on either side** — the access token is
   a JWT signed with `javax.crypto`, and Media Streams is four JSON events. The browser SDK is
