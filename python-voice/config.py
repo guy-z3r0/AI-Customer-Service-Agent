@@ -93,8 +93,16 @@ class VoiceConfig:
         return _as_float(self._values.get("tts_volume"), 1.0)
 
     def voice_name(self, language: str) -> str:
+        """The voice the operator chose, or "" for whichever the provider picks.
+
+        An empty setting used to be replaced with the default below, which meant
+        the "whichever the provider picks" option in Settings quietly did not do
+        that. The defaults still apply when Java cannot be reached at all —
+        they are the base this dictionary is built on — but a value the operator
+        deliberately cleared is now respected.
+        """
         key = "tts_voice_bn" if language == "bn" else "tts_voice_en"
-        return str(self._values.get(key) or DEFAULTS[key])
+        return str(self._values.get(key) or "")
 
     @property
     def credentials_path(self) -> str:

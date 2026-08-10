@@ -9,6 +9,7 @@ import com.ulab.agent.domain.enums.CallMode;
 import com.ulab.agent.domain.enums.Language;
 import com.ulab.agent.domain.enums.Telephony;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -68,11 +69,35 @@ public class CallSession {
     private volatile boolean warnedAboutSilence;
     private volatile boolean busy;
 
+    /**
+     * When the caller started the sentence they are in the middle of, or null
+     * when the line is theirs and quiet. A caller reading an address out is not
+     * a silent one, and asking them whether they are still there while they do
+     * it is the rudest thing this app can do.
+     */
+    private volatile Instant speakingSince;
+
+    /**
+     * True while the agent's own audio is still playing. It holds the floor
+     * from the moment a line is sent until the voice server reports the sound
+     * has finished, which on a greeting is a dozen seconds.
+     */
+    private volatile boolean agentHasTheFloor;
+
     /** Wrong guesses at who is calling before this call may not ask again. */
     private static final int MAX_LOOKUP_ATTEMPTS = 3;
 
+    /**
+     * How long a caller may hold the floor before the watchdog stops believing
+     * them. The flag is cleared when their sentence ends, and this is the
+     * backstop for the sentence that never does — a recogniser that dies
+     * mid-utterance would otherwise switch the silence watch off for good.
+     */
+    private static final int LONGEST_CREDIBLE_SENTENCE_S = 60;
+
     private final AtomicInteger failedLookups = new AtomicInteger();
     private final AtomicInteger unheard = new AtomicInteger();
+    private final AtomicInteger slangStrikes = new AtomicInteger();
     private final AtomicBoolean hangupSent = new AtomicBoolean();
 
     private final Deque<LlmRequest.Message> history = new ArrayDeque<>();
@@ -122,6 +147,10 @@ public class CallSession {
     public void setClient(ClientDtos.ClientView client) { this.client = client; }
 
     public int nextTurn() { return turns.incrementAndGet(); }
+
+    /** How many exchanges this call has had so far. The model is told, so it
+     * can tell a caller with a question from one who is only playing. */
+    public int turnsSoFar() { return turns.get(); }
 
     /** True the first time it is asked, so a warning is spoken once per call. */
     public boolean firstNotice() { return noticed.compareAndSet(false, true); }
@@ -183,15 +212,51 @@ public class CallSession {
 
     public void setBusy(boolean busy) { this.busy = busy; }
 
+    /** The caller has begun a sentence. Nothing may interrupt them until it ends. */
+    public void callerStartedSpeaking() {
+        speakingSince = Instant.now();
+        touch();
+    }
+
+    public void callerStoppedSpeaking() {
+        speakingSince = null;
+        touch();
+    }
+
+    /** True while the caller is mid-sentence, and has not been for too long. */
+    public boolean callerIsSpeaking() {
+        Instant since = speakingSince;
+        return since != null
+                && Duration.between(since, Instant.now()).getSeconds() < LONGEST_CREDIBLE_SENTENCE_S;
+    }
+
+    public boolean agentHasTheFloor() { return agentHasTheFloor; }
+
+    /**
+     * The agent has stopped speaking and its audio has finished playing. The
+     * caller's silence is measured from here, not from when the reply was sent.
+     */
+    public void agentFinishedSpeaking() {
+        agentHasTheFloor = false;
+        touch();
+    }
+
     /**
      * Counts utterances the recogniser could make nothing of, in a row. One is
      * a cough; two in a row is a caller who needs to be asked to repeat
      * themselves, which is most of what Banglish sounds like to a recogniser
-     * listening in one language.
+     * listening in one language. It keeps counting past that, because a line
+     * that only ever produces noise has to end rather than ask for ever.
      */
     public int unheardInARow() { return unheard.incrementAndGet(); }
 
     public void heardSomething() { unheard.set(0); }
+
+    /**
+     * How many times this caller has sworn at the agent. The first is answered
+     * with a warning and the second ends the call.
+     */
+    public int recordSlang() { return slangStrikes.incrementAndGet(); }
 
     // -------------------------------------------------------------- history --
 
@@ -244,8 +309,17 @@ public class CallSession {
         return link == candidate;
     }
 
-    /** Sends one message down the call's websocket to the voice server. */
+    /**
+     * Sends one message down the call's websocket to the voice server.
+     *
+     * Anything the agent says takes the floor here rather than at each of the
+     * five call sites that say something. One place cannot be forgotten; five
+     * can, and the one that was forgotten is the one where the watchdog talks
+     * over the caller.
+     */
     public void send(String type, Object... keysAndValues) {
+        if ("say".equals(type) || "greeting".equals(type)) agentHasTheFloor = true;
+
         Map<String, Object> message = new LinkedHashMap<>();
         message.put("type", type);
         for (int i = 0; i + 1 < keysAndValues.length; i += 2) {

@@ -17,6 +17,7 @@ import com.ulab.agent.services.ClientService;
 import com.ulab.agent.services.PostCallService;
 import com.ulab.agent.utils.Lang;
 import com.ulab.agent.utils.PiiMasker;
+import com.ulab.agent.utils.SlangGuard;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,9 +60,6 @@ public class ConversationBrain {
     /** How long a call survives without a voice server before it is written off. */
     private static final int LINK_GRACE_SECONDS = 6;
 
-    /** Utterances the recogniser makes nothing of before the agent asks again. */
-    private static final int UNHEARD_BEFORE_REPROMPT = 2;
-
     /** Exchanges one call may have before it is ended as a runaway. */
     private static final int MAX_TURNS_PER_CALL = 100;
 
@@ -76,6 +74,8 @@ public class ConversationBrain {
     private final ToolExecutor toolExecutor;
     private final ClientService clients;
     private final PostCallService postCall;
+    private final Greeter greeter;
+    private final CallInterventions interventions;
 
     private final ExecutorService turnWorkers = Executors.newVirtualThreadPerTaskExecutor();
     private final ScheduledExecutorService linkGrace = Executors.newSingleThreadScheduledExecutor();
@@ -84,9 +84,12 @@ public class ConversationBrain {
                              CallLogService callLog, BusinessRepository businesses,
                              AiSettingsRepository aiSettings, CallModeMachine modes,
                              ToolRegistry tools, ToolExecutor toolExecutor,
-                             ClientService clients, PostCallService postCall) {
+                             ClientService clients, PostCallService postCall, Greeter greeter,
+                             CallInterventions interventions) {
         this.clients = clients;
         this.postCall = postCall;
+        this.greeter = greeter;
+        this.interventions = interventions;
         this.registry = registry;
         this.prompts = prompts;
         this.router = router;
@@ -157,17 +160,39 @@ public class ConversationBrain {
         callLog.partial(callId, text);
     }
 
+    /**
+     * The caller has opened their mouth. Nothing else is known about it yet —
+     * this comes from the voice detector, not the recogniser — and that is
+     * exactly why it is worth having: the free recogniser says nothing at all
+     * until a sentence is finished, so without this the only sign of a caller
+     * halfway through a long sentence is silence.
+     */
+    public void onCallerSpeaking(UUID callId) {
+        CallSession session = registry.get(callId);
+        if (session != null) session.callerStartedSpeaking();
+    }
+
+    public void onCallerStopped(UUID callId) {
+        CallSession session = registry.get(callId);
+        if (session != null) session.callerStoppedSpeaking();
+    }
+
     /** The caller finished a sentence. This is where a turn begins. */
     public void onTranscriptFinal(UUID callId, String text, long tSttFinal) {
         CallSession session = registry.get(callId);
         if (session == null) return;
 
-        session.touch();
+        session.callerStoppedSpeaking();
         if (text == null || text.isBlank()) {
-            nothingHeard(session);
+            interventions.nothingHeard(session);
             return;
         }
         session.heardSomething();
+        if (SlangGuard.isAbusive(text)) {
+            interventions.answerAbuse(session, text);
+            return;
+        }
+        followTheCallersLanguage(session, text);
 
         int turn = session.nextTurn();
         if (turn > MAX_TURNS_PER_CALL) {
@@ -176,7 +201,7 @@ public class ConversationBrain {
             // request — so the call ends rather than the quota.
             log.warn("[{}] reached {} turns; ending the call", callId, MAX_TURNS_PER_CALL);
             session.requestHangup("turn_limit", spokenLine(session, "voice.goodbye"));
-            hangUpIfAsked(session);
+            interventions.hangUpIfAsked(session);
             return;
         }
 
@@ -235,7 +260,7 @@ public class ConversationBrain {
      */
     public void onAgentDone(UUID callId) {
         CallSession session = registry.get(callId);
-        if (session != null) session.touch();
+        if (session != null) session.agentFinishedSpeaking();
     }
 
     public void onCallEnd(UUID callId, String reason) {
@@ -285,73 +310,36 @@ public class ConversationBrain {
             session.requestHangup(wanted.name().toLowerCase(),
                     spokenLine(session, modes.farewellKey(wanted)));
             // A turn in flight will send it once it stops talking.
-            if (!session.isBusy()) hangUpIfAsked(session);
+            if (!session.isBusy()) interventions.hangUpIfAsked(session);
         }
         return true;
     }
 
-    // --------------------------------------------------------------- silence --
-
-    /** Asks whether anyone is still there, once, after the configured wait. */
-    void warnAboutSilence(CallSession session) {
-        log.info("[{}] nobody has said anything; asking", session.callId());
-        sayOutsideATurn(session, spokenLine(session, "voice.still_there"));
-    }
-
-    void hangUpForSilence(CallSession session) {
-        log.info("[{}] still nothing; ending the call", session.callId());
-        session.requestHangup("inactivity", spokenLine(session, "voice.inactivity_farewell"));
-        hangUpIfAsked(session);
-    }
+    // ------------------------------------------------------- following along --
 
     /**
-     * Two utterances in a row that the recogniser made nothing of is a caller
-     * worth asking to repeat themselves — most often someone switching between
-     * Bangla and English mid-sentence while the recogniser listens for one.
+     * Moves the call to whichever language the caller is actually using.
+     *
+     * The model has an action for this and is told to use it, but it does not
+     * have to — and when it does not, the recogniser goes on listening for the
+     * language nobody is speaking. What the caller said is already written in
+     * one script or the other, and that is not a judgement call.
      */
-    private void nothingHeard(CallSession session) {
-        if (session.unheardInARow() < UNHEARD_BEFORE_REPROMPT) return;
-
-        session.heardSomething();
-        sayOutsideATurn(session, spokenLine(session, "voice.not_understood"));
+    private void followTheCallersLanguage(CallSession session, String text) {
+        Language wanted = LanguageSense.wantedBy(text, session.language());
+        if (LanguageSense.apply(session, wanted, callLog)) {
+            log.info("[{}] the caller is speaking {}; the call follows them",
+                    session.callId(), wanted.code());
+        }
     }
 
     // ---------------------------------------------------------- one turn --
 
     private void greet(CallSession session) {
-        String greeting = greetingFor(session);
-        session.remember(AGENT, greeting);
-        callLog.record(session.callId(), agentLine(session, greeting));
-        // last=false: the language question is coming, and the microphone stays
-        // shut until the agent has finished asking it.
-        session.send("greeting", "text", greeting,
-                "language", session.language().code(), "last", false);
-        askWhichLanguage(session);
-
+        greeter.greet(session);
         if (!router.isReady(session.selection()) && session.firstNotice()) {
             noticeNoModel(session);
         }
-    }
-
-    /**
-     * The one moment in a call where the agent says the same thing twice.
-     *
-     * Nobody knows yet which language the caller wants, so the question goes out
-     * once in each — as two sentences, each tagged with its own language, so the
-     * voice server reads the Bangla half in a Bangla voice rather than putting
-     * an English accent on it.
-     */
-    private void askWhichLanguage(CallSession session) {
-        String key = "voice.language_question";
-        String english = Lang.ui("en").get(key);
-        String bangla = Lang.ui("bn").get(key);
-
-        session.send("say", "seq", 0, "text", english, "language", "en", "last", false);
-        session.send("say", "seq", 0, "text", bangla, "language", "bn", "last", true);
-
-        String both = Lang.bilingual(key);
-        session.remember(AGENT, both);
-        callLog.record(session.callId(), agentLine(session, both));
     }
 
     /**
@@ -371,7 +359,7 @@ public class ConversationBrain {
 
         session.setBusy(false);
         session.touch();
-        hangUpIfAsked(session);
+        interventions.hangUpIfAsked(session);
     }
 
     private void persistAgentLine(CallSession session, int turn, String whole,
@@ -388,43 +376,6 @@ public class ConversationBrain {
         if (tTtsFirst == null && late != null) {
             callLog.stampTtsFirst(session.callId(), messageSeq, turn, late);
         }
-    }
-
-    /**
-     * Anything the agent says that no caller asked for — a re-prompt, a check
-     * that someone is still there. It carries turn 0, so the panel does not
-     * count it as an exchange and expects no reply time for it.
-     */
-    private void sayOutsideATurn(CallSession session, String text) {
-        if (text == null || text.isBlank()) return;
-
-        session.remember(AGENT, text);
-        callLog.record(session.callId(), agentLine(session, text));
-        session.send("say", "seq", 0, "text", text,
-                "language", session.language().code(), "last", true);
-    }
-
-    private static CallDtos.LineToStore agentLine(CallSession session, String text) {
-        return CallDtos.LineToStore.agent(text, session.language().code(),
-                session.mode().name(), 0, null, null, null);
-    }
-
-    /**
-     * Sends the hangup once, after whatever was being said has been said. The
-     * farewell travels with it rather than as another sentence, so the voice
-     * server can speak it and close in one move.
-     */
-    private void hangUpIfAsked(CallSession session) {
-        CallSession.Hangup hangup = session.takeHangup();
-        if (hangup == null) return;
-
-        if (hangup.farewellText() != null && !hangup.farewellText().isBlank()) {
-            session.remember(AGENT, hangup.farewellText());
-            callLog.record(session.callId(), agentLine(session, hangup.farewellText()));
-        }
-        log.info("[{}] hanging up ({})", session.callId(), hangup.reason());
-        session.send("hangup", "reason", hangup.reason(), "language", session.language().code(),
-                "farewellText", hangup.farewellText() == null ? "" : hangup.farewellText());
     }
 
     // -------------------------------------------------- what TurnRunner needs --
@@ -464,17 +415,6 @@ public class ConversationBrain {
 
     /** One of the few lines the agent says that the model did not write. */
     String spokenLine(CallSession session, String stringKey) {
-        return Lang.ui(session.language().code()).get(stringKey);
-    }
-
-    private String greetingFor(CallSession session) {
-        AiSettings settings = session.aiSettings();
-        boolean bangla = session.language() == Language.BN;
-        String greeting = settings == null ? null
-                : (bangla ? settings.getGreetingBn() : settings.getGreetingEn());
-        if (greeting != null && !greeting.isBlank()) return greeting;
-
-        String template = bangla ? Lang.DEFAULT_GREETING_BN : Lang.DEFAULT_GREETING_EN;
-        return template.formatted(session.business().getName());
+        return CallInterventions.spokenLine(session, stringKey);
     }
 }

@@ -23,8 +23,9 @@ import java.util.UUID;
  * browser to the voice server and back, and this socket carries the words that
  * fall out of it in each direction:
  *
- *   voice server -> here   call_start, transcript_partial, transcript_final,
- *                          spoken, agent_done, call_end
+ *   voice server -> here   call_start, caller_speaking, caller_stopped,
+ *                          transcript_partial, transcript_final, spoken,
+ *                          agent_done, call_end
  *   here -> voice server   greeting, say, set_language, hangup
  */
 @Component
@@ -95,6 +96,8 @@ public class TurnSocket extends TextWebSocketHandler {
                         body.path("text").asText(), body.path("tSttFinal").asLong());
                 case "spoken" -> brain.onSpoken(callId, body.path("seq").asInt(),
                         body.path("tTtsFirst").asLong());
+                case "caller_speaking" -> brain.onCallerSpeaking(callId);
+                case "caller_stopped" -> brain.onCallerStopped(callId);
                 case "agent_done" -> brain.onAgentDone(callId);
                 case "call_end" -> brain.onCallEnd(callId, body.path("reason").asText("hangup"));
                 default -> log.warn("[{}] the voice server sent an unknown message: {}", callId, type);

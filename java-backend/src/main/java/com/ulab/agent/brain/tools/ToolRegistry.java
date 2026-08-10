@@ -57,8 +57,10 @@ public class ToolRegistry {
                     "type": "string",
                     "enum": ["EXISTING_CUSTOMER", "WRONG_NUMBER", "COMPLEX_REQUEST"],
                     "description": "EXISTING_CUSTOMER when the caller turns out to be on the \
-            books, WRONG_NUMBER for a wrong number or a nuisance call, COMPLEX_REQUEST when a \
-            member of staff has to take this over"
+            books. WRONG_NUMBER for a wrong number, or for a nuisance caller — somebody who \
+            has asked twice for things this business has nothing to do with, such as poems, \
+            jokes, riddles or general knowledge, or who is plainly only testing what you are. \
+            COMPLEX_REQUEST when a member of staff has to take this over"
                   },
                   "reason": {
                     "type": "string",

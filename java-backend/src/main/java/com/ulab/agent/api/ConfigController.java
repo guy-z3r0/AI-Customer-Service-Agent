@@ -86,9 +86,17 @@ public class ConfigController {
         }
     }
 
-    /** What the page falls back to: a plain text field, as it always used to be. */
+    /**
+     * What the page falls back to: a plain text field, as it always used to be.
+     *
+     * "unknown" for the credentials rather than "missing" — a voice server that
+     * is not running has not told us anything, and warning that a key file is
+     * absent when nobody looked would send an operator hunting for a file that
+     * is already there.
+     */
     private static Map<String, Object> noVoices() {
-        return Map.of("voices", List.of(), "speaks", List.of(), "provider", "unknown");
+        return Map.of("voices", List.of(), "speaks", List.of(), "provider", "unknown",
+                "credentials", "unknown", "nearMisses", List.of());
     }
 
     private static ClientHttpRequestFactory timeoutFactory() {

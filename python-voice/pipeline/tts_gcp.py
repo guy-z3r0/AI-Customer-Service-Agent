@@ -22,6 +22,26 @@ MIN_SPEAKING_RATE = 0.25
 MAX_SPEAKING_RATE = 4.0
 
 
+def google_voice_name(wanted: str, language: str) -> str:
+    """The chosen voice, if Google is the one that has it.
+
+    The Settings menu lists every voice this installation could use, and that
+    includes the machine's own. Sending one of those names to Google is not a
+    slightly-wrong voice, it is an error Google refuses the whole request over —
+    so the caller hears nothing rather than the wrong accent. An empty name is a
+    valid request meaning "any voice for this language", which is exactly what
+    an operator choosing "whichever the provider picks" asked for.
+    """
+    if not wanted:
+        return ""
+    if wanted.lower().startswith(language.lower() + "-"):
+        return wanted
+
+    log.info("'%s' is not a Google voice for %s, so Google is picking one instead",
+             wanted, language)
+    return ""
+
+
 class GoogleTts(TtsProvider):
 
     name = "gcp"
@@ -39,10 +59,9 @@ class GoogleTts(TtsProvider):
         if not text:
             return b""
 
-        voice_name = self._config.voice_name(language)
         voice = self._tts.VoiceSelectionParams(
             language_code=VOICE_LOCALE.get(language, "en-US"),
-            name=voice_name,
+            name=self._voice_name(language),
         )
         audio_config = self._tts.AudioConfig(
             audio_encoding=self._tts.AudioEncoding.LINEAR16,
@@ -60,6 +79,9 @@ class GoogleTts(TtsProvider):
         # wants the samples.
         pcm, _rate = wav_unwrap(response.audio_content)
         return pcm
+
+    def _voice_name(self, language: str) -> str:
+        return google_voice_name(self._config.voice_name(language), language)
 
     def _speaking_rate(self) -> float:
         rate = self._config.tts_rate / NORMAL_WORDS_PER_MINUTE

@@ -18,6 +18,7 @@ import { MicStream } from '../audio/mic_stream.js';
 import { button, dropdown, element, keyValueRow, tagBadge } from '../components.js';
 import { TwilioMode } from '../twilio_mode.js';
 import { Transcript } from './live_transcript.js';
+import { formatElapsed, formatMedian } from './call_stats.js';
 
 const MODE_HUES = {
     NEW_CUSTOMER: 'azure',
@@ -130,16 +131,10 @@ class LiveCall {
         keyValueRow(grid, this.t['livecall.mode'], this.modeBadge());
         keyValueRow(grid, this.t['livecall.override_mode'], this.modeChooser());
         keyValueRow(grid, this.t['livecall.call_id'], this.callId || '—');
-        keyValueRow(grid, this.t['livecall.duration'], this.elapsed());
+        keyValueRow(grid, this.t['livecall.duration'],
+            formatElapsed(this.startedAt, this.endedAt));
         keyValueRow(grid, this.t['livecall.turns'], String(this.turns));
-        keyValueRow(grid, this.t['livecall.median_latency'], this.medianLatency());
-    }
-
-    /** How long the call has been running, as m:ss. */
-    elapsed() {
-        if (!this.startedAt) return '—';
-        const seconds = Math.floor(((this.endedAt || Date.now()) - this.startedAt) / 1000);
-        return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+        keyValueRow(grid, this.t['livecall.median_latency'], formatMedian(this.latencies));
     }
 
     /**
@@ -350,6 +345,11 @@ class LiveCall {
     async startMicrophone() {
         this.player = new AgentPlayer((speaking) => {
             if (this.mic) this.mic.setMuted(speaking);
+            // Only this page knows when the agent's voice has actually been
+            // heard: the audio arrives far faster than it plays. The server
+            // waits for this before reopening the microphone, so a farewell is
+            // not cut off and the agent does not hear its own tail come back.
+            if (!speaking) this.sendControl({ type: 'audio_done' });
         });
         this.mic = new MicStream((pcm) => this.sendAudio(pcm));
         try {
@@ -362,6 +362,12 @@ class LiveCall {
     sendAudio(pcm) {
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
             this.socket.send(pcm.buffer);
+        }
+    }
+
+    sendControl(message) {
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+            this.socket.send(JSON.stringify(message));
         }
     }
 
@@ -453,18 +459,6 @@ class LiveCall {
         this.refreshFacts();
     }
 
-    /**
-     * Something that happened to the call rather than something said on it, put
-     * in the transcript where it happened so the two read in order.
-     */
-    addNote(label, detail, hue) {
-        const row = element('div', 'list-row');
-        row.appendChild(tagBadge(label, hue || 'violet'));
-        if (detail) row.appendChild(element('span', 'list-row__text', detail));
-        this.appendRow(row);
-        this.scrollToEnd();
-    }
-
     async changeMode(mode) {
         if (!this.callId || mode === this.mode) return;
         try {
@@ -492,12 +486,4 @@ class LiveCall {
         this.refreshFacts();
     }
 
-    medianLatency() {
-        if (this.latencies.length === 0) return '—';
-        const sorted = [...this.latencies].sort((a, b) => a - b);
-        const middle = Math.floor(sorted.length / 2);
-        const median = sorted.length % 2 ? sorted[middle]
-            : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
-        return `${median} ms`;
-    }
 }

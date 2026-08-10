@@ -2,7 +2,7 @@
 
 **Project:** AI Customer Service Agent v2
 **Mode:** PHASED
-**Updated:** 2026-08-05
+**Updated:** 2026-08-11
 
 ## Current phase
 Phase 7 — Twilio mode, second business, polish (built and run live, awaiting approval)
@@ -55,16 +55,78 @@ need a credential, a microphone or Docker, not more code.
 - **SETUP.md** now carries the speech, voice, email and telephony walkthroughs in full, plus
   the call-behaviour timings.
 
+## Since then — nine more faults from live calls, all fixed
+Seven of the nine turned out to be one question asked in different places: **who has the
+floor, and how does anything else know?** See `architecture.md`, "What the turn-taking pass
+changed". Test script: `docs/ors/logs/turn_taking_test.md`.
+
+- **Speech was cut off at the end.** The turn ended on an estimate made from the length of
+  the samples, which is when the audio *would* finish if it began the instant it was sent. It
+  does not — it crosses a socket and plays out of a buffer. The page now reports `audio_done`
+  when the sound has really stopped, and the session waits for the later of the two plus
+  400 ms.
+- **The agent heard its own tail.** The same estimate reopened the microphone early, the last
+  syllable of the reply came back as an utterance, the recogniser made no words of it, and the
+  agent asked the caller to repeat something the caller never said. Same fix.
+- **"Sorry, I could not make that out" ran for ever.** The counter behind it was reset every
+  time it asked, and asking is the agent speaking, which restarts the silence clock — so
+  neither the re-prompt limit nor the inactivity hangup could ever fire. Two asks, then
+  goodbye, and the count is no longer reset by the asking.
+- **"Are you still there?" landed on people mid-sentence.** The free recogniser says nothing
+  at all until a sentence is finished, so a caller talking for twenty seconds was
+  indistinguishable from an empty room. The voice detector now reports `caller_speaking` and
+  `caller_stopped`, and the agent holds the floor from the moment a line is sent until its
+  audio has played — so the watchdog cannot talk over either party.
+- **Replies did not always ask anything back.** A caller has no screen; the reply has to say
+  what to do next. Now a standing rule, with the goodbye as the only exception.
+- **Bangla would not switch back to English.** A Bangla call kept a Bangla recogniser however
+  the caller spoke, so every English sentence came back as Bengali letters spelling English
+  sounds — including the sentence asking to switch. `LanguageSense` reads the script the words
+  came back in and moves the call itself, without waiting for the model to call `set_language`.
+  The free recogniser also retries a failed utterance in the other language.
+- **Nuisance callers were answered politely for ever.** Prompt work: a nuisance block naming
+  what is not a customer, the exchange count so "a second time" is checkable, and `WRONG_NUMBER`
+  in the tool schema now describes them. **This one is the model's judgement, not a rule, and
+  is the only fix here that can vary between calls.**
+- **Swearing had no consequence.** `SlangGuard` matches a short list of words with no other
+  meaning, whole-word, in both languages. First one warns and stays on the line; the second
+  ends the call. An irritated customer — "this is useless", "your service is terrible" — is
+  deliberately not caught.
+- **Settings showed the Bangla voice as PLACEHOLDER.** Choosing "whichever the provider picks"
+  stores an empty value, which the panel then badged as undecided. Blank is now an answer for
+  the two voice keys, the option names the voice it will really use, and an empty setting is
+  no longer quietly replaced by a hard-coded Google default.
+
+**And the reason Bangla did not work after adding the API key:** the file in `secrets/` is
+named `gcp-credentials.json.json` — Windows hides known extensions — while the setting points
+at `gcp-credentials.json`. Everything downstream degraded politely and silently around it.
+Settings now says the file is missing and names the near-miss. **Rename that file and Google
+speech comes on within a minute, with no restart.**
+
+Windows has no Bangla voice to install: this machine's SAPI and OneCore registries hold three
+English voices between them and nothing else, and Microsoft ships no Bangla TTS. Bangla speech
+means Google Cloud. The OneCore renderer added here (`pipeline/tts_windows.py`) still earns
+its place — it speaks with voices `pyttsx3` refuses outright, verified against Microsoft Mark
+— but it cannot conjure a language Windows does not have.
+
 ## In progress
-Nothing. Waiting for Nanjiba to run `phase_07_test.md` and approve.
+Nothing. Waiting for Nanjiba to run `phase_07_test.md` and `turn_taking_test.md`, and approve.
 
 ## Blocked
 Nothing blocked.
 
 ## Next action
-**Approval gate.** Run `docs/ors/logs/phase_07_test.md`, steps 1–15. Steps 1–8 and 11 need no
-new credentials. Steps 4 (a second business answering as itself), 7 (a stranger no longer
-mistaken for a customer) and 11 (everything behaving with no Twilio credentials) decide it.
+**Approval gate.** Two scripts now.
+
+1. `docs/ors/logs/turn_taking_test.md`, which covers the nine faults above. Steps 5 (a reply
+   that is not cut off), 7 (an agent that does not talk over you) and 9 (a call that ends
+   itself rather than asking for ever) decide it. **Rename `secrets/gcp-credentials.json.json`
+   to `secrets/gcp-credentials.json` before section E** — that one rename is what turns Bangla
+   on.
+2. `docs/ors/logs/phase_07_test.md`, steps 1–15, unchanged except that step 1 now expects
+   148 Java tests and 51 Python. Steps 4 (a second business answering as itself), 7 (a
+   stranger no longer mistaken for a customer) and 11 (everything behaving with no Twilio
+   credentials) decide that one.
 
 After that the project is built, and what is left is the definition-of-done sitting:
 
@@ -105,8 +167,10 @@ After that the project is built, and what is left is the definition-of-done sitt
   apply, and both run as uid 10001 rather than root.
 - **The test suite had never actually run on this machine.** Mockito's Byte Buddy did not
   understand Java 25's class files, so the fourteen login tests and both other security suites
-  errored before executing. `byte-buddy.version` is pinned to 1.18.0 and all 119 Java tests
-  now pass, alongside 32 Python.
+  errored before executing. `byte-buddy.version` is pinned to 1.18.0. **148 Java tests and 51
+  Python now pass**, up from 119 and 32 — the turn-taking pass added `CallEndsItselfTest`,
+  `InactivityWatchdogTest`, `LanguageSenseTest`, `SlangGuardTest`,
+  `test_talking_over_each_other.py` and `test_voice_choices.py`.
 - `spring.jpa.hibernate.ddl-auto` is now `validate` (WARN-002). Flyway still owns the schema;
   Hibernate checks it at boot and refuses to start if an entity has drifted from a migration.
 - **Running two backends at once still breaks the database, but for one reason now instead of
@@ -119,7 +183,11 @@ After that the project is built, and what is left is the definition-of-done sitt
 - Files above BUILD_SPEC's list, each justified in its phase log: `brain/llm/SseChat.java`,
   `brain/SentenceSplitter.java`, `brain/TurnRunner.java`, `utils/Prompts.java`,
   `utils/LangPages.java`, `services/CallHistoryService.java`, `static/js/pages/live_transcript.js`,
-  and the grouped dto containers `ClientDtos` / `EditorDtos`.
+  and the grouped dto containers `ClientDtos` / `EditorDtos`. The turn-taking pass added
+  `brain/CallInterventions.java`, `brain/Greeter.java`, `brain/LanguageSense.java`,
+  `utils/SlangGuard.java`, `python-voice/pipeline/tts_windows.py` and
+  `static/js/pages/call_stats.js` — the first two are `ConversationBrain` split at 532 lines to
+  get back under the 500-line cap, and the last is `live_call.js` for the same reason.
 - Dependencies added across the whole project: `spring-boot-starter-test` (test scope) and
   `websockets` on the Python side. **No Twilio library on either side** — the access token is
   a JWT signed with `javax.crypto`, and Media Streams is four JSON events. The browser SDK is

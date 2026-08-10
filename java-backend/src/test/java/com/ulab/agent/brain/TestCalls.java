@@ -12,6 +12,7 @@ import com.ulab.agent.domain.enums.Language;
 import com.ulab.agent.domain.enums.Telephony;
 import com.ulab.agent.services.CallLogService;
 import com.ulab.agent.services.ClientService;
+import com.ulab.agent.services.ConfigService;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -112,6 +113,36 @@ public final class TestCalls {
         }
     }
 
+    /**
+     * A brain wired up for the things a call does without a model.
+     *
+     * Re-prompting, hanging up on silence and answering abuse all happen before
+     * any request is made, so everything that would talk to a vendor, a
+     * database or a knowledge base is left out rather than faked. A test that
+     * strays into one of those will say so plainly by failing on a null.
+     */
+    public static ConversationBrain brainWithoutAModel(CallRegistry registry, Recorder log) {
+        return new ConversationBrain(registry, null, routerWithNoKeys(), log, null, null,
+                new CallModeMachine(log), null, null, null, null, new Greeter(log),
+                new CallInterventions(log));
+    }
+
+    /**
+     * A router that will answer, and has nothing to answer with.
+     *
+     * A caller's sentence still starts a turn, and a turn on a fresh install
+     * with no key apologises rather than throwing — which is the path these
+     * tests want it to take when they are looking at something else.
+     */
+    private static LlmRouter routerWithNoKeys() {
+        return new LlmRouter(new ConfigService(null) {
+            @Override
+            public String getString(String key, String fallback) {
+                return ConfigService.PLACEHOLDER_PREFIX + "NONE";
+            }
+        });
+    }
+
     public static CallSession session(CallMode mode, Language language, Outbox outbox) {
         CallSession session = new CallSession(UUID.randomUUID(), business(), aiSettings(),
                 "About the business:\nAn example.", new LlmRouter.Selection("gemini", "m", 0.7),
@@ -126,6 +157,7 @@ public final class TestCalls {
         public final List<ModeTransition> modeChanges = new ArrayList<>();
         public final List<Language> languageChanges = new ArrayList<>();
         public final List<String> identified = new ArrayList<>();
+        public final List<String> notices = new ArrayList<>();
         public final List<CallDtos.LineToStore> lines = new ArrayList<>();
 
         public Recorder() {
@@ -151,6 +183,11 @@ public final class TestCalls {
         @Override
         public void recordClient(UUID callId, UUID clientId, String name) {
             identified.add(name);
+        }
+
+        @Override
+        public void notice(UUID callId, String stringKey) {
+            notices.add(stringKey);
         }
     }
 

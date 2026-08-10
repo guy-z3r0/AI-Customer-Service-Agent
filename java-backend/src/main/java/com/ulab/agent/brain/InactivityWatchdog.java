@@ -18,8 +18,13 @@ import java.time.Instant;
  * Settings, so an owner whose customers think slowly can lengthen them without
  * touching any of this.
  *
- * A call in the middle of a turn is not silent, it is waiting on a model, and
- * is left alone.
+ * Three kinds of quiet are not silence and are all left alone: a call waiting on
+ * a model, a call where the agent's own audio is still playing, and a call where
+ * the caller is in the middle of a sentence. The last two are why an agent used
+ * to ask "are you still there?" over the top of its own greeting, and over a
+ * caller who was answering it — the free recogniser says nothing at all until a
+ * sentence is finished, so a caller talking for twenty seconds looked identical
+ * to an empty room.
  */
 @Component
 public class InactivityWatchdog {
@@ -32,12 +37,13 @@ public class InactivityWatchdog {
     private static final int DEFAULT_HANGUP_S = 40;
 
     private final CallRegistry registry;
-    private final ConversationBrain brain;
+    private final CallInterventions interventions;
     private final ConfigService config;
 
-    public InactivityWatchdog(CallRegistry registry, ConversationBrain brain, ConfigService config) {
+    public InactivityWatchdog(CallRegistry registry, CallInterventions interventions,
+                              ConfigService config) {
         this.registry = registry;
-        this.brain = brain;
+        this.interventions = interventions;
         this.config = config;
     }
 
@@ -55,18 +61,23 @@ public class InactivityWatchdog {
     }
 
     private void check(CallSession session, long silentSeconds, int warnAfter, int hangUpAfter) {
-        if (session.isBusy() || session.isEnding()) return;
+        if (isSomebodyTalking(session) || session.isEnding()) return;
 
         try {
             if (silentSeconds >= hangUpAfter) {
-                brain.hangUpForSilence(session);
+                interventions.hangUpForSilence(session);
             } else if (silentSeconds >= warnAfter && session.firstSilenceWarning()) {
-                brain.warnAboutSilence(session);
+                interventions.warnAboutSilence(session);
             }
         } catch (RuntimeException e) {
             // One stuck call must not stop the sweep reaching the others.
             log.warn("[{}] could not act on the silence: {}", session.callId(), e.toString());
         }
+    }
+
+    /** True when the line is not free for the agent to say anything on. */
+    private static boolean isSomebodyTalking(CallSession session) {
+        return session.isBusy() || session.agentHasTheFloor() || session.callerIsSpeaking();
     }
 
     private static long silenceOf(CallSession session, Instant now) {

@@ -85,8 +85,10 @@ public class PromptBuilder {
             prompt.append("- ").append(settings.getReplyStyle()).append('\n');
         }
         prompt.append('\n').append(languageDirective(session.language())).append("\n\n");
+        prompt.append(Prompts.NUISANCE.formatted(business.getName())).append("\n\n");
         prompt.append(Prompts.SITUATION).append('\n')
-                .append(modes.instructionsFor(session.mode())).append("\n\n");
+                .append(modes.instructionsFor(session.mode())).append('\n')
+                .append(Prompts.EXCHANGES_SO_FAR.formatted(session.turnsSoFar())).append("\n\n");
         prompt.append(Prompts.TOOLS).append("\n\n");
         appendCaller(prompt, session);
         prompt.append(session.knowledge()).append("\n\n");

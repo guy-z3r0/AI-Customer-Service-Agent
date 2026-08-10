@@ -42,6 +42,22 @@ CHUNK_BYTES = CHUNK_MS * BYTES_PER_MS
 PRE_ROLL_MS = 300
 PRE_ROLL_BYTES = PRE_ROLL_MS * BYTES_PER_MS
 
+# How long to keep the line to ourselves after the agent's audio should have
+# finished.
+#
+# The finishing time is worked out from the length of the samples, which is when
+# the audio would end if it began the instant it was sent. It does not: it
+# crosses a socket, waits in a buffer, and on a telephone waits again. Ending
+# the turn on the estimate alone cuts the last word off a farewell, and reopens
+# the microphone into the tail of the agent's own voice — which comes back as an
+# utterance the recogniser makes nothing of, and the agent then asks the caller
+# to repeat something the caller never said.
+TAIL_GUARD_S = 0.4
+
+# And how long to wait for a transport that can tell us when its audio really
+# finished. Only the browser can; a telephone has the estimate and nothing else.
+PLAYBACK_GRACE_S = 3.0
+
 # The only English in this file. Every word the agent says comes from
 # utils/Lang.java over /api/lang — except this one, which is what it says when
 # Java is the thing that cannot be reached.
@@ -53,11 +69,19 @@ FALLBACK_LINES = {
 class VoiceSession:
     """Owns one call. The transport creates it, feeds it, and closes it."""
 
-    def __init__(self, call_id: str, send_json, send_audio, telephony: str = "browser"):
+    def __init__(self, call_id: str, send_json, send_audio, telephony: str = "browser",
+                 reports_playback: bool = False):
+        """
+        :param reports_playback: whether this transport sends "audio_done" once
+            the agent's audio has actually been heard. The browser does, because
+            the page owns the speaker; Twilio does not, so a telephone call
+            falls back to the estimate and the tail guard.
+        """
         self.call_id = call_id
         self.telephony = telephony
         self._send_json = send_json
         self._send_audio = send_audio
+        self._reports_playback = reports_playback
 
         self.language = "en"
         self.config = None
@@ -82,6 +106,11 @@ class VoiceSession:
         # When the audio already handed to the transport will have finished
         # being heard. Everything that means "the agent has stopped" waits for it.
         self._speech_ends_at = 0.0
+        # Set by the transport when the caller has actually heard everything.
+        # Cleared each time more audio is sent, so a report that arrived between
+        # two sentences cannot be mistaken for the end of the reply.
+        self._heard_it_all = asyncio.Event()
+        self._heard_it_all.set()
 
         # Sentences queued but not yet spoken, and whether the brain has said
         # its turn is finished. The turn ends when both are true — see
@@ -156,8 +185,15 @@ class VoiceSession:
         self._feed_recogniser(pcm, events)
 
         for name, payload in events:
-            if name == "utterance":
+            if name == "speech_start":
+                # The brain has no other way of knowing. The free recogniser
+                # says nothing until a sentence is finished, so without this a
+                # caller talking for twenty seconds looks exactly like an empty
+                # room — and gets asked whether they are still there.
+                await self._tell_brain({"type": "caller_speaking"})
+            elif name == "utterance":
                 self._end_utterance()
+                await self._tell_brain({"type": "caller_stopped"})
 
     def _feed_recogniser(self, pcm: bytes, events) -> None:
         """Send audio to the recogniser, opening a stream when speech starts."""
@@ -281,7 +317,18 @@ class VoiceSession:
         self._tts = await asyncio.to_thread(providers.build_tts, self.config, wanted)
         self.tts_name = self._tts.name
         self._release_stt()  # the next utterance opens a stream in the new language
+        if self._endpointer is not None:
+            # Half a sentence in the old language is not the start of one in the
+            # new. Without this the pre-roll carries it into the first utterance
+            # the switched recogniser hears, which is the one that has to work.
+            self._endpointer.reset()
+        log.info("[%s] the call is now in %s, spoken by %s",
+                 self.call_id, self.language, self.tts_name)
         await self._send_json({"type": "ready", "language": self.language, "tts": self.tts_name})
+
+    def on_playback_finished(self) -> None:
+        """The transport says the caller has now heard everything sent so far."""
+        self._heard_it_all.set()
 
     # ------------------------------------------------------------- speaking --
 
@@ -348,6 +395,9 @@ class VoiceSession:
         if not pcm:
             raise RuntimeError("the voice produced no audio")
 
+        # Cleared before a byte goes out, so the report we later wait for can
+        # only be the one that follows this audio.
+        self._heard_it_all.clear()
         first_byte_at = 0.0
         for offset in range(0, len(pcm), CHUNK_BYTES):
             await self._send_audio(pcm[offset:offset + CHUNK_BYTES])
@@ -391,9 +441,24 @@ class VoiceSession:
             await self.close(self._pending_hangup)
 
     async def _wait_for_the_voice_to_finish(self) -> None:
+        """Waits until the caller has really stopped hearing the agent.
+
+        Three things in order, because each covers what the one before it
+        cannot: the length of the audio, which is a lower bound; the transport's
+        own word that it finished, when the transport has one; and a fixed guard
+        for the buffering and the echo neither of those can see.
+        """
         remaining = self._speech_ends_at - time.time()
         if remaining > 0:
             await asyncio.sleep(remaining)
+
+        if self._reports_playback:
+            try:
+                await asyncio.wait_for(self._heard_it_all.wait(), PLAYBACK_GRACE_S)
+            except asyncio.TimeoutError:
+                log.debug("[%s] the caller's end never said the audio finished", self.call_id)
+
+        await asyncio.sleep(TAIL_GUARD_S)
 
     # ------------------------------------------------------------ internals --
 

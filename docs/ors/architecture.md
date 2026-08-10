@@ -463,6 +463,48 @@ Two rules set here:
   fenced as `<caller_record trust="data-only">` in the prompt, with chat-role prefixes and
   angle brackets neutralised on the way in.
 
+## What the turn-taking pass changed
+
+Not a phase either — nine faults from Nanjiba's own calls, and seven of the nine turn out to
+be one question asked in different places: **who has the floor, and how does anything else
+know?** The agent's audio finishes playing several seconds after it is sent, and the free
+recogniser says nothing at all until a caller's sentence is finished, so both ends of a
+conversation were invisible to the part deciding whether to speak.
+
+```
+  agent speaks ──▶ samples sent in ms ──▶ buffer ──▶ heard over several seconds
+                        │                                      │
+                        │                        page: {"audio_done"} ─┐
+                        └── estimate from sample length ───────────────┤
+                                                                       ▼
+                                              wait for the later of the two, + 400 ms
+                                                                       │
+                        ┌──────────────────────────────────────────────┘
+                        ▼
+        mic reopens ──▶ VAD: speech_start ──▶ caller_speaking ─┐
+                                  │                            ├──▶ nobody interrupts
+                        utterance ─┴─▶ caller_stopped ──────────┘
+```
+
+| Layer | Added or changed |
+|---|---|
+| `brain/` | `CallInterventions` — everything the agent says that no caller asked for, and the one way a call hangs up, split out of `ConversationBrain`; `Greeter` — the opening, split out for the same reason; `LanguageSense` — which language the caller is actually speaking, read from the script their words came back in |
+| `brain/` | `CallSession` gains a floor: `agentHasTheFloor` (set by `send` itself, so no call site can forget), `callerIsSpeaking` with a 60-second backstop, and a slang strike count. `InactivityWatchdog` now depends on `CallInterventions` rather than the whole brain, and stays quiet while either party holds the floor |
+| `utils/` | `SlangGuard` — a short list of words with no other meaning, matched whole; `Prompts` gains the always-ask-a-question rule, the nuisance-caller block and the exchange count that makes "a second time" checkable |
+| `api/` | `TurnSocket` routes two new messages up: `caller_speaking`, `caller_stopped` |
+| `python-voice/` | `session.py` waits for the later of the sample-length estimate and the transport's own `audio_done`, then 400 ms more; `browser_ws.py` carries that report; `tts_windows.py` speaks with the OneCore voices SAPI refuses to enumerate; `voices.py` keys its cache on the credentials file and lists what Windows installed elsewhere; `stt_fallback.py` retries an utterance in the other language |
+| `static/js/` | `call_stats.js` (the two formatted numbers, out of `live_call.js`); the page reports playback finishing; Settings names the voice behind "whichever the provider picks" and says when a key file is one character from where it should be |
+
+Three rules set here:
+
+- **An estimate is a lower bound, not an end.** Anything that waits for the agent to stop
+  waits for the transport to say so, and then a little longer. Ending on the estimate cut off
+  farewells and let the agent hear its own tail as a caller who could not be understood.
+- **Every loop ends.** A re-prompt is the agent speaking, which restarts the silence clock, so
+  a counter that resets when it re-prompts can never reach anything. Two asks, then goodbye.
+- **The model is asked, not relied on, for what can be measured.** Which language a caller is
+  speaking is written in their words; the agent follows that whether or not the model notices.
+
 ## Panel screens in contract parts
 
 Named in Nocturne vocabulary so screens are assembled, not invented: shell = `side-rail`

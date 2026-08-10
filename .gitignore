@@ -43,3 +43,5 @@ secrets/*
 java-backend/.embedded-postgres
 SECURITY-AUDIT.md
 suggested-updates.md
+java-backend/src/test/java/com/ulab/agent/security/TwilioSecurityTest.java
+java-backend/src/test/java/com/ulab/agent/services/ConfigServiceTest.java

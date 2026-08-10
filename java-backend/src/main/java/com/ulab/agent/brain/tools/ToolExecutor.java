@@ -6,6 +6,7 @@ import com.ulab.agent.api.dto.CallDtos;
 import com.ulab.agent.api.dto.ClientDtos;
 import com.ulab.agent.brain.CallModeMachine;
 import com.ulab.agent.brain.CallSession;
+import com.ulab.agent.brain.LanguageSense;
 import com.ulab.agent.domain.ModeTransition;
 import com.ulab.agent.domain.enums.CallMode;
 import com.ulab.agent.domain.enums.Language;
@@ -174,16 +175,11 @@ public class ToolExecutor {
         }
 
         Language language = Language.of(wanted);
-        if (language == session.language()) {
-            return result(true, "language", language.code(), "changed", false);
-        }
-
-        session.setLanguage(language);
-        callLog.recordLanguageChange(session.callId(), language);
-        // The voice server has to change recogniser and voice to match, and only
-        // it knows what that costs, so it is told rather than asked.
-        session.send("set_language", "language", language.code());
-        return result(true, "language", language.code(), "changed", true);
+        // One place moves a call between languages, because the brain does it
+        // too — on what the caller's own words were written in, without waiting
+        // for the model to notice.
+        boolean changed = LanguageSense.apply(session, language, callLog);
+        return result(true, "language", language.code(), "changed", changed);
     }
 
     private String setMode(CallSession session, String wanted, String reason) {

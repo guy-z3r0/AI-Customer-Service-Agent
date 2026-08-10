@@ -8,7 +8,13 @@
 # so the database, the migrations and the encryption all behave exactly as they
 # do in the container.
 #
-# Two windows open — the backend and the voice server. Close either to stop it.
+# Two windows open - the backend and the voice server. Close either to stop it.
+#
+# Everything below stays plain ASCII on purpose. Windows PowerShell 5.1 reads a
+# .ps1 with no byte-order mark as Windows-1252, so a UTF-8 em dash arrives as
+# three characters ending in a curly closing quote - which PowerShell accepts as
+# a real string delimiter. One em dash inside one string silently ends it and
+# every line after that fails to parse.
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
@@ -58,13 +64,13 @@ Write-Host ""
 #
 # Every `set` here is written as set "NAME=value". Without the quotes cmd takes
 # the space before the && as part of the value, so JAVA_HOME ends in a space,
-# Maven looks for "…\jdk-21 \bin\java.exe" and reports that JAVA_HOME is not
-# defined correctly — while pointing at a path that looks perfectly right.
+# Maven looks for "...\jdk-21 \bin\java.exe" and reports that JAVA_HOME is not
+# defined correctly - while pointing at a path that looks perfectly right.
 Write-Host "Starting the backend and its database..." -ForegroundColor Cyan
 # --- The operator login ---------------------------------------------------
 # Both processes need the same pair: the backend to check it, the voice server
 # to present it. Taken from .env when it is there, and otherwise generated for
-# this run — so the stack still starts with no configuration, and still starts
+# this run - so the stack still starts with no configuration, and still starts
 # locked rather than open.
 $panelUser = "operator"
 $panelPassword = ""
@@ -80,7 +86,7 @@ if (-not $panelPassword) {
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
     $panelPassword = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+','-').Replace('/','_')
     Write-Host ""
-    Write-Host "No PANEL_PASSWORD in .env — generated one for this run:" -ForegroundColor Yellow
+    Write-Host "No PANEL_PASSWORD in .env - generated one for this run:" -ForegroundColor Yellow
     Write-Host "    $panelUser / $panelPassword" -ForegroundColor Yellow
     Write-Host "  The browser will ask for it. Put it in .env to keep it."
 }
@@ -107,7 +113,7 @@ foreach ($attempt in 1..240) {
     Start-Sleep -Seconds 2
     try {
         # The liveness probe, which is the one endpoint that answers without
-        # the login — everything else would come back 401 from here.
+        # the login - everything else would come back 401 from here.
         $response = Invoke-WebRequest -Uri "$panel/api/health/live" -TimeoutSec 3 -UseBasicParsing
         if ($response.StatusCode -eq 200) { $ready = $true; break }
     } catch { }

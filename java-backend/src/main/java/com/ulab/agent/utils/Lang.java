@@ -198,7 +198,25 @@ public final class Lang {
                 "সংরক্ষিত মান রাখতে ফাঁকা রাখুন"));
         m.put("settings.voice_default", pair("Whichever the provider picks",
                 "প্রোভাইডার যেটি বেছে নেয়"));
+        // The same option, once the panel knows which voice that actually is.
+        // "Whichever the provider picks" is honest and tells an operator
+        // nothing; naming the voice is the difference between a setting they
+        // can check and one they have to place a call to find out about.
+        m.put("settings.voice_default_named", pair("Whichever the provider picks — %s",
+                "প্রোভাইডার যেটি বেছে নেয় — %s"));
+        m.put("settings.voice_none_installed", pair("No voice installed for this language",
+                "এই ভাষার জন্য কোনো কণ্ঠ ইনস্টল করা নেই"));
         m.put("settings.voice_absent", pair("not installed here", "এই মেশিনে নেই"));
+        // Why Google is switched off, said where the operator can act on it.
+        // A missing key file is by far the most common reason Bangla sounds
+        // wrong, and it used to show as nothing at all — the app degraded
+        // politely and silently, and the two are not the same thing.
+        m.put("settings.credentials_missing", pair(
+                "There is no Google credentials file at the path below, so Google speech is off and both languages are read by whatever voice this machine has.",
+                "নিচের পাথে কোনো গুগল ক্রেডেনশিয়াল ফাইল নেই, তাই গুগল স্পিচ বন্ধ এবং দুটি ভাষাই এই মেশিনের যে কণ্ঠ আছে তা দিয়ে পড়া হচ্ছে।"));
+        m.put("settings.credentials_near_miss", pair(
+                "The secrets folder does contain %s — if that is the key, rename it to match the path below.",
+                "secrets ফোল্ডারে %s আছে — এটিই যদি কী হয়, তবে নিচের পাথের সাথে মিলিয়ে নাম বদলান।"));
         // One %s only: the panel replaces the first it finds.
         m.put("settings.no_voice_for", pair(
                 "No voice on this machine speaks %s, so it will be read by the wrong one. Add Google Cloud credentials, or install a matching speech voice in Windows.",

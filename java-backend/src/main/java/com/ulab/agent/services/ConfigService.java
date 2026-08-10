@@ -48,6 +48,17 @@ public class ConfigService {
             "twilio_auth_token", "twilio_api_key_secret", "twilio_account_sid",
             "smtp_password");
 
+    /**
+     * Keys where an empty value is an answer rather than a gap.
+     *
+     * Choosing "whichever the provider picks" from the voice menu stores an
+     * empty string, and the panel then badged it PLACEHOLDER — telling an
+     * operator that the thing they had just decided was still undecided. The
+     * feature gate in {@link #isPlaceholder(String)} is left alone, because
+     * blank there correctly means "no voice was named".
+     */
+    private static final Set<String> BLANK_IS_A_CHOICE = Set.of("tts_voice_en", "tts_voice_bn");
+
     /** Which section of the Settings page a key belongs to. */
     private static final Map<String, String> KEY_GROUPS = buildKeyGroups();
 
@@ -173,7 +184,8 @@ public class ConfigService {
     private ConfigEntryView toView(AppConfigEntry entry) {
         String plain = readable(entry.getValueJson());
         boolean secret = SECRET_KEYS.contains(entry.getKey());
-        boolean placeholder = isPlaceholderValue(plain);
+        boolean placeholder = isPlaceholderValue(plain)
+                && !(plain.isBlank() && BLANK_IS_A_CHOICE.contains(entry.getKey()));
         String shown = (secret && !placeholder) ? mask(plain) : plain;
         return new ConfigEntryView(entry.getKey(), groupOf(entry.getKey()), shown, secret, placeholder);
     }

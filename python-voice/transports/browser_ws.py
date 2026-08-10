@@ -5,10 +5,16 @@ audio, 16 kHz mono PCM16 in both directions. Text frames are JSON control
 messages:
 
     page  -> here   {"type": "start",  "language": "en"}
+                    {"type": "audio_done"}
                     {"type": "end",    "reason": "hangup"}
     here  -> page   {"type": "ready",  "language": "en", "tts": "gcp"}
                     {"type": "agent_state", "speaking": true}
                     {"type": "error",  "code": "...", "msg": "..."}
+
+The page is the only thing that knows when the agent's voice has actually been
+heard — the audio leaves here in milliseconds and then plays out of a buffer at
+the other end — so "audio_done" is what closes the agent's turn rather than a
+guess at how long the samples last.
 
 No account, no phone number, nothing to configure — which is why this is the
 default way to place a call and Twilio is the option.
@@ -47,7 +53,8 @@ async def browser_call(websocket: WebSocket, call_id: str) -> None:
     await websocket.accept()
     session = VoiceSession(call_id,
                            send_json=_json_sender(websocket),
-                           send_audio=_audio_sender(websocket))
+                           send_audio=_audio_sender(websocket),
+                           reports_playback=True)
     SESSIONS[call_id] = session
     reason = "hangup"
 
@@ -90,10 +97,13 @@ async def _run(websocket: WebSocket, session: VoiceSession) -> None:
         if control is None:
             continue
 
-        if control.get("type") == "start" and not started:
+        kind = control.get("type")
+        if kind == "start" and not started:
             await session.start(control.get("language"))
             started = True
-        elif control.get("type") == "end":
+        elif kind == "audio_done":
+            session.on_playback_finished()
+        elif kind == "end":
             await session.close(control.get("reason", "hangup"))
             return
 

@@ -75,8 +75,9 @@ async def voices() -> dict:
     whatever Google offers once its credentials are in place.
     """
     settings = fetch()
-    # Cached: building this list starts a speech engine, and the panel asks for
-    # it every time Settings is opened. Restart the voice server to rescan.
+    # Cached for a minute, and the cache key includes the Google key file — so
+    # putting one in place, or correcting its name, shows up here by itself
+    # rather than after a restart nobody knew to do.
     found = voice_catalogue.available(settings)
     return {
         "voices": found,
@@ -85,6 +86,9 @@ async def voices() -> dict:
         # wrong. The panel turns this into a sentence an operator can act on.
         "speaks": sorted({voice["language"] for voice in found} & {"en", "bn"}),
         "provider": "gcp" if settings.google_credentials_available() else "fallback",
+        # And when it is off, why — which is nearly always a key file that is
+        # not where the setting says it is.
+        **voice_catalogue.why_google_is_off(settings),
     }
 
 

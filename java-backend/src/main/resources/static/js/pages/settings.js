@@ -26,6 +26,7 @@ export async function renderSettings(host, ctx) {
     const panel = element('div', 'panel');
     panel.appendChild(element('div', 'section-header', t['settings.title']));
     panel.appendChild(element('p', 'muted-body', t['settings.note']));
+    credentialWarnings(catalogue, t).forEach((line) => panel.appendChild(line));
     const warning = missingVoiceWarning(catalogue, t);
     if (warning) panel.appendChild(warning);
 
@@ -96,6 +97,26 @@ function missingVoiceWarning(catalogue, t) {
     return line;
 }
 
+/**
+ * Says when the Google key file is not where the setting points.
+ *
+ * A key sitting in the secrets folder under a slightly different name is the
+ * single most common reason Bangla sounds wrong, and every part of the app is
+ * built to degrade quietly around it — so without this the operator's evidence
+ * that anything is missing is that the voice is English.
+ */
+function credentialWarnings(catalogue, t) {
+    if (catalogue.credentials !== 'missing') return [];
+
+    const lines = [element('p', 'inline-error', t['settings.credentials_missing'])];
+    const nearby = (catalogue.nearMisses || []).join(', ');
+    if (nearby) {
+        lines.push(element('p', 'inline-error',
+            t['settings.credentials_near_miss'].replace('%s', nearby)));
+    }
+    return lines;
+}
+
 function field(entry, ctx, catalogue) {
     if (VOICE_KEYS[entry.key] && catalogue.voices.length > 0) {
         return voiceField(entry, ctx, catalogue);
@@ -133,7 +154,7 @@ function voiceField(entry, ctx, catalogue) {
     const language = VOICE_KEYS[entry.key];
     const suitable = catalogue.voices.filter((voice) => voice.language === language);
 
-    const options = [{ value: '', label: ctx.strings['settings.voice_default'] }];
+    const options = [{ value: '', label: defaultVoiceLabel(suitable, ctx) }];
     suitable.forEach((voice) => options.push({ value: voice.id, label: voice.name }));
     if (entry.value && !suitable.some((voice) => voice.id === entry.value)) {
         options.push({ value: entry.value, label: `${entry.value} — ${ctx.strings['settings.voice_absent']}` });
@@ -147,6 +168,19 @@ function voiceField(entry, ctx, catalogue) {
     const wrap = element('div');
     wrap.appendChild(select);
     return wrap;
+}
+
+/**
+ * The empty option, named after the voice it would really produce.
+ *
+ * The voice server picks the first voice that speaks the language, so the panel
+ * can say which one that is instead of leaving an operator to place a call and
+ * listen. When there is none, the option says that rather than implying a
+ * choice was made.
+ */
+function defaultVoiceLabel(suitable, ctx) {
+    if (suitable.length === 0) return ctx.strings['settings.voice_none_installed'];
+    return ctx.strings['settings.voice_default_named'].replace('%s', suitable[0].name);
 }
 
 async function save(form, entries, ctx) {

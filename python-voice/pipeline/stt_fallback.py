@@ -12,10 +12,24 @@ import threading
 import time
 
 from audio import SAMPLE_RATE
-from config import SPEECH_LOCALE
+from config import ALTERNATE_SPEECH_LOCALES, SPEECH_LOCALE
 from pipeline.providers import SttStream
 
 log = logging.getLogger(__name__)
+
+
+def locales_for(language: str) -> list[str]:
+    """The call's own language first, then the other one.
+
+    The Cloud recogniser is handed both at once and picks; this endpoint takes
+    exactly one, so the second language costs a second attempt on an utterance
+    that has already failed. It is worth it: without it a caller on a Bangla
+    call cannot be understood saying anything in English, including the sentence
+    asking to switch to English, which leaves them with no way out.
+    """
+    primary = SPEECH_LOCALE.get(language, "en-US")
+    return [primary] + [locale for locale in ALTERNATE_SPEECH_LOCALES.get(language, [])
+                        if locale != primary]
 
 
 class FallbackSttStream(SttStream):
@@ -56,19 +70,34 @@ class FallbackSttStream(SttStream):
     # --------------------------------------------------------- worker thread --
 
     def _recognise(self, pcm: bytes) -> None:
+        """Tries the call's language, then the other one.
+
+        This endpoint takes exactly one language and has no equivalent of the
+        Cloud recogniser's alternatives, so a caller on a Bangla call who says
+        a sentence in English is simply not understood — including the sentence
+        asking to switch to English, which leaves them stuck. A second attempt
+        costs one more request on an utterance that already failed, and it is
+        what makes changing language possible without a Google account.
+        """
         text = ""
         if pcm:
-            try:
-                audio = self._sr.AudioData(pcm, SAMPLE_RATE, 2)
-                text = self._recognizer.recognize_google(
-                    audio, language=SPEECH_LOCALE.get(self._language, "en-US"))
-            except self._sr.UnknownValueError:
-                log.info("Free recogniser could not make out the audio")
-            except self._sr.RequestError as e:
-                log.warning("Free recogniser is unreachable: %s", e)
-            except Exception as e:
-                log.warning("Free recogniser failed: %s", e)
+            audio = self._sr.AudioData(pcm, SAMPLE_RATE, 2)
+            for locale in locales_for(self._language):
+                text = self._try(audio, locale)
+                if text:
+                    break
         self._emit_final(text.strip())
+
+    def _try(self, audio, locale: str) -> str:
+        try:
+            return self._recognizer.recognize_google(audio, language=locale)
+        except self._sr.UnknownValueError:
+            log.info("Free recogniser made nothing of the audio in %s", locale)
+        except self._sr.RequestError as e:
+            log.warning("Free recogniser is unreachable: %s", e)
+        except Exception as e:
+            log.warning("Free recogniser failed: %s", e)
+        return ""
 
     def _emit_final(self, text: str) -> None:
         if self._final_sent or self._loop.is_closed():

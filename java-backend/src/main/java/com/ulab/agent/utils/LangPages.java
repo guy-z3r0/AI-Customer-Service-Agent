@@ -236,6 +236,15 @@ final class LangPages {
         m.put("voice.inactivity_farewell", pair(
                 "I cannot hear anything, so I will end the call here. Please call back any time. Goodbye.",
                 "কিছু শুনতে পাচ্ছি না, তাই কলটি এখানেই শেষ করছি। যেকোনো সময় আবার কল করবেন। বিদায়।"));
+        // Said once, and only once: the second time the call ends instead. The
+        // warning still asks a question, because a caller who is told off and
+        // given nothing to answer has no way back into the conversation.
+        m.put("voice.slang_warning", pair(
+                "I would like to help you, but please keep the language civil. If it happens again I will have to end the call. What can I help you with?",
+                "আমি আপনাকে সাহায্য করতে চাই, তবে অনুগ্রহ করে ভদ্র ভাষায় কথা বলুন। আবার এমন হলে আমাকে কলটি শেষ করতে হবে। আমি কীভাবে সাহায্য করতে পারি?"));
+        m.put("voice.slang_farewell", pair(
+                "I am ending the call because of the language being used. You are welcome to call back. Goodbye.",
+                "ব্যবহৃত ভাষার কারণে আমি কলটি শেষ করছি। আপনি আবার কল করতে পারেন। বিদায়।"));
         m.put("voice.wrong_number_farewell", pair(
                 "It sounds like this may be the wrong number. Thank you for calling, and goodbye.",
                 "মনে হচ্ছে নম্বরটি ভুল হয়েছে। কল করার জন্য ধন্যবাদ, বিদায়।"));

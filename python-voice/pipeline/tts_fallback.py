@@ -16,7 +16,7 @@ import tempfile
 import threading
 
 from audio import SAMPLE_RATE, resample_pcm16, wav_unwrap
-from pipeline import voices
+from pipeline import tts_windows, voices
 from pipeline.providers import TtsProvider
 
 log = logging.getLogger(__name__)
@@ -48,7 +48,19 @@ class OfflineTts(TtsProvider):
         if not text:
             return b""
         with _ENGINE_LOCK:
-            return self._render(text, self._voice_for(language))
+            voice_id = self._voice_for(language)
+            # A voice Windows installed after the machine was built is in a
+            # registry SAPI does not read, and pyttsx3 refuses an id it did not
+            # enumerate. Those go through their own renderer; everything else
+            # takes the ordinary path.
+            if tts_windows.is_onecore(voice_id):
+                spoken = tts_windows.render(text, voice_id, int(self._config.tts_rate),
+                                            float(self._config.tts_volume))
+                if spoken:
+                    return spoken
+                log.warning("Falling back to the default voice for %r", text[:40])
+                voice_id = None
+            return self._render(text, voice_id)
 
     def _voice_for(self, language: str) -> str | None:
         """Which installed voice should read this, if any suits.
