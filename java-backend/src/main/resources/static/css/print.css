@@ -1,0 +1,154 @@
+/*
+ * The print-sheet part of the contract, and the only stylesheet in the panel
+ * that is not about a screen.
+ *
+ * It is linked with media="print", so nothing here has any effect until the
+ * moment a page is being printed — there is no light mode hiding in this file
+ * and no way to switch one on. Values come only from nocturne.css, same rule
+ * as everywhere else; the paper and ink tokens it reads exist for this file
+ * alone.
+ *
+ * The one screen this was written for is the call report, which is meant to be
+ * handed to somebody who does not have this app open.
+ */
+
+/* The fallback is not a second opinion about the margin. A page box is not an
+   element, so root custom properties are not guaranteed to reach it; where
+   they do not, the fallback is the same value the token holds. */
+@page {
+    margin: var(--page-margin, 1.5cm);
+}
+
+/* ------------------------------------------------------- ink on paper -- */
+
+html, body {
+    height: auto;
+    background: var(--paper);
+    color: var(--ink-primary);
+}
+
+/* The shell is the application, not the document. */
+.side-rail,
+.top-bar,
+.status-bar,
+.toast-stack,
+.dialog__scrim,
+.no-print {
+    display: none;
+}
+
+/* A printed button is a picture of something that cannot be pressed. */
+.button {
+    display: none;
+}
+
+.window-frame,
+.window-column {
+    display: block;
+    min-width: 0;
+    min-height: 0;
+}
+
+.plugin-host {
+    padding: var(--s0);
+    overflow: visible;
+    background: var(--paper);
+}
+
+/* ----------------------------------------------------- flat surfaces -- */
+
+/* A panel is a region of a screen, and paper has no regions. What is left of
+   one is its spacing, which is what still separates the parts of a document. */
+.panel,
+.card,
+.stat-tile {
+    padding: var(--s0);
+    background: var(--paper);
+    box-shadow: none;
+    break-inside: avoid;
+}
+
+.panel + .panel {
+    margin-top: var(--s6);
+}
+
+.section-header {
+    color: var(--ink-primary);
+}
+
+.muted-body,
+.caption,
+.key-value__label,
+.stat-tile__label,
+.list-row__hint,
+.table th {
+    color: var(--ink-muted);
+}
+
+/* The accent is there to be found at a glance among five other numbers. On a
+   page being read rather than scanned it is a colour with no meaning. */
+.stat-tile__value,
+.stat-tile__value--accent {
+    color: var(--ink-primary);
+}
+
+.stat-tile__value--quiet {
+    color: var(--ink-muted);
+}
+
+/* A bar is a picture of the number beside it. With backgrounds off it would
+   print as an empty outline, which reads as zero. */
+.progress {
+    display: none;
+}
+
+/* ------------------------------------------------------------- data -- */
+
+.table th {
+    position: static;
+    background: var(--paper);
+    border-bottom: var(--hairline) solid var(--ink-hairline);
+}
+
+.table td,
+.list-row {
+    border-color: var(--ink-hairline);
+}
+
+/* Hover is not a thing that happens to paper. */
+.table tbody tr:hover,
+.list-row:hover {
+    background: transparent;
+}
+
+/* Truncation on a screen is recoverable — the tooltip or the scrollbar is
+   still there. On paper it is not, so everything wraps and runs its full
+   length instead. */
+.table {
+    table-layout: auto;
+}
+
+.table td,
+.list-row__text,
+.list-row__hint,
+.section-header {
+    white-space: normal;
+    overflow: visible;
+}
+
+.list-row {
+    min-height: 0;
+}
+
+.table-wrap,
+.scroll-region,
+.transcript {
+    max-height: none;
+    overflow: visible;
+}
+
+/* A badge keeps its hue when the reader prints backgrounds, and falls back to
+   ink when they do not. */
+.tag-badge {
+    padding: var(--s0) var(--s3);
+}

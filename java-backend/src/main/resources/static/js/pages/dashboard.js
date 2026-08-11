@@ -11,7 +11,7 @@
 
 import { api } from '../api.js';
 import { outcomeBadge } from '../call_outcome.js';
-import { button, element, table, tagBadge } from '../components.js';
+import { button, element, statTile, table, tagBadge } from '../components.js';
 
 const LATENCY_TARGET_MS = 2000;
 
@@ -62,13 +62,6 @@ function buildStats(summary, ctx) {
     return panel;
 }
 
-function statTile(label, value) {
-    const tile = element('div', 'stat-tile');
-    tile.appendChild(element('div', 'stat-tile__label', label));
-    tile.appendChild(element('div', 'stat-tile__value', value));
-    return tile;
-}
-
 /**
  * How long the agent takes to answer: usually, and at its worst.
  *
@@ -80,20 +73,11 @@ function statTile(label, value) {
  * @param headline true for the one tile allowed to use the accent
  */
 function replyTile(label, milliseconds, t, headline) {
-    const tile = element('div', 'stat-tile');
-    tile.appendChild(element('div', 'stat-tile__label', label));
-
     if (milliseconds == null) {
-        tile.appendChild(element('div', 'stat-tile__value stat-tile__value--quiet',
-            t['dash.no_calls_yet']));
-        return tile;
+        return statTile(label, t['dash.no_calls_yet'], { quiet: true });
     }
-    const value = element('div', 'stat-tile__value', `${milliseconds} ms`);
-    if (headline && milliseconds <= LATENCY_TARGET_MS) {
-        value.classList.add('stat-tile__value--accent');
-    }
-    tile.appendChild(value);
-    return tile;
+    return statTile(label, `${milliseconds} ms`,
+        { accent: headline && milliseconds <= LATENCY_TARGET_MS });
 }
 
 // ------------------------------------------------------ how calls end up --

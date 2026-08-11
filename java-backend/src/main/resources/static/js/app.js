@@ -16,6 +16,7 @@ import { renderBusinessEditor } from './pages/business_editor.js';
 import { renderClients } from './pages/clients.js';
 import { renderHistory } from './pages/history.js';
 import { renderLiveCall } from './pages/live_call.js';
+import { renderReport } from './pages/report.js';
 import { renderSettings } from './pages/settings.js';
 
 const HEALTH_POLL_MS = 10000;
@@ -30,7 +31,10 @@ const ROUTES = [
     { id: 'settings', icon: '⚙', render: renderSettings },
     // Reached from a business rather than from the rail, so it carries the id
     // it is editing in the hash: #/business_editor/<id>.
-    { id: 'business_editor', hidden: true, render: renderBusinessEditor }
+    { id: 'business_editor', hidden: true, render: renderBusinessEditor },
+    // Reached from the call history, and carrying everything it covers in the
+    // hash — #/report/<from>/<to>/<business> — so a report is a link.
+    { id: 'report', hidden: true, render: renderReport }
 ];
 
 // The overview is the landing page: it answers "is this thing working" before

@@ -448,7 +448,51 @@ line is ever edited to suit one screen.
 
 | Part | Group | Added | Because |
 |---|---|---|---|
-| — | — | — | — |
+| `print-sheet` | Surfaces | 2026-08-11 | The call report is printed and handed to somebody who does not have this app. |
+
+#### `print-sheet`
+
+The paper rendition of a panel. It is not a light theme and is not a setting: it exists
+only while a page is being printed, and no screen ever shows it.
+
+The contract refuses light mode because dark is the design. Paper is not a screen. A
+Nocturne page sent to a printer is light grey text on white — browsers drop background
+colours by default — so the choice was never dark-on-paper against light-on-paper, it was
+a readable document against an unreadable one.
+
+| Token | Value |
+|---|---|
+| `paper` | `#FFFFFF` |
+| `ink.primary` | `#12151F` |
+| `ink.muted` | `#4A5068` |
+| `ink.hairline` | `#AEB4C8` |
+| page margin | `1.5cm` |
+
+Floor check: `ink.primary` on `paper` 18.22:1 · `ink.muted` on `paper` 7.97:1.
+
+Surfaces flatten. `panel`, `card` and `stat-tile` lose their background, shadow and
+padding — a panel is a region of a screen and paper has no regions — and gain a page
+break rule so none is split across two sheets. `section-header` keeps its spacing, which
+is what separates one part of the document from the next once the surfaces are gone.
+
+The shell does not print: `side-rail`, `top-bar`, `status-bar` and `toast` are the
+application, not the document. Neither does any control: a printed button is a picture of
+something that cannot be pressed. A screen marks its own controls with `no-print`.
+
+The accent does not print. Exactly one number on a screen may wear it, and that number is
+accented to be found at a glance among five others — on a page being read rather than
+scanned it becomes a colour with no meaning, and prints as `ink.primary` like the rest.
+The data palette does print, on `tag-badge`, and degrades to `ink.primary` text when the
+reader's printer is not putting backgrounds down.
+
+`progress` does not print. It is a picture of the number beside it and carries nothing of
+its own; with backgrounds off it would print as an empty outline, which reads as zero.
+
+**Overflow:** this is the one place the contract's truncation rules are reversed. A
+`table` cell, a `list-row` label and a `scroll-region` all wrap and run to their full
+length on paper, because truncation on a screen is recoverable — the tooltip or the
+scrollbar is still there — and on paper it is not. Nothing on a printed sheet scrolls,
+and nothing on it is hidden.
 
 ---
 

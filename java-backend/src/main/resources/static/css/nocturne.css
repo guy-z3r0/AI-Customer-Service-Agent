@@ -30,6 +30,16 @@
     --data-rose: #F2798C;
     --data-violet: #B18CF5;
 
+    /* ---- paper: the print-sheet part, read only by print.css ----
+       Not a light theme and not a setting. These exist only while a page is
+       being printed, because a Nocturne page sent to a printer is light grey
+       text on white. */
+    --paper: #FFFFFF;
+    --ink-primary: #12151F;
+    --ink-muted: #4A5068;
+    --ink-hairline: #AEB4C8;
+    --page-margin: 1.5cm;
+
     /* ---- states, resolved per surface ---- */
     --panel-hover: #232839;
     --panel-pressed: #2C3141;

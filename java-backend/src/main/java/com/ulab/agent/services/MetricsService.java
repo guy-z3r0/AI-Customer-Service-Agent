@@ -1,7 +1,6 @@
 package com.ulab.agent.services;
 
 import com.ulab.agent.api.dto.MetricsDtos;
-import com.ulab.agent.domain.CallMessage;
 import com.ulab.agent.domain.CallRecord;
 import com.ulab.agent.domain.enums.CallMode;
 import com.ulab.agent.repo.BusinessRepository;
@@ -9,11 +8,11 @@ import com.ulab.agent.repo.CallMessageRepository;
 import com.ulab.agent.repo.CallRecordRepository;
 import com.ulab.agent.repo.ClientRepository;
 import com.ulab.agent.repo.KbEntryRepository;
+import com.ulab.agent.utils.ReplyTimes;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.File;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
@@ -64,7 +63,7 @@ public class MetricsService {
     public MetricsDtos.Summary summary(String voiceServerState) {
         List<CallRecord> allCalls = calls.findAll();
         Instant midnight = Instant.now().truncatedTo(ChronoUnit.DAYS);
-        List<Long> replies = replyTimes();
+        List<Long> replies = ReplyTimes.sorted(messages.findAll());
 
         return new MetricsDtos.Summary(
                 businesses.count(),
@@ -72,34 +71,11 @@ public class MetricsService {
                 clients.count(),
                 allCalls.size(),
                 allCalls.stream().filter(call -> call.getStartedAt().isAfter(midnight)).count(),
-                percentile(replies, 50),
-                percentile(replies, 90),
+                ReplyTimes.percentile(replies, 50),
+                ReplyTimes.percentile(replies, 90),
                 capabilities(voiceServerState),
                 modeCounts(allCalls),
                 history.list(null, RECENT_CALLS));
-    }
-
-    /** Every turn's reply time, oldest to slowest, ready to be cut at a rank. */
-    private List<Long> replyTimes() {
-        return messages.findAll().stream()
-                .map(MetricsService::replyMillis)
-                .filter(ms -> ms != null && ms >= 0)
-                .sorted()
-                .toList();
-    }
-
-    /**
-     * Percentiles rather than an average, because one call that stalled on a
-     * cold connection should not be allowed to make a hundred fast ones look
-     * slow. The median says what a caller usually waits; the 90th says what the
-     * unlucky one in ten waited, which is the number that decides whether the
-     * system is really under two seconds or only mostly.
-     */
-    private static Long percentile(List<Long> sorted, int percent) {
-        if (sorted.isEmpty()) return null;
-
-        int rank = (int) Math.ceil(sorted.size() * percent / 100.0) - 1;
-        return sorted.get(Math.clamp(rank, 0, sorted.size() - 1));
     }
 
     /**
@@ -118,11 +94,6 @@ public class MetricsService {
         return Arrays.stream(CallMode.values())
                 .map(mode -> new MetricsDtos.ModeCount(mode.name(), counted.getOrDefault(mode, 0L)))
                 .toList();
-    }
-
-    private static Long replyMillis(CallMessage message) {
-        if (message.getTSttFinal() == null || message.getTTtsFirst() == null) return null;
-        return Duration.between(message.getTSttFinal(), message.getTTtsFirst()).toMillis();
     }
 
     /**

@@ -19,7 +19,7 @@ edited, and a replace that does not quietly double everything.
 cd java-backend && mvn clean package
 ```
 
-*Expected:* `BUILD SUCCESS`, `Tests run: 184, Failures: 0, Errors: 0`. Twelve of
+*Expected:* `BUILD SUCCESS`, `Tests run: 208, Failures: 0, Errors: 0`. Twelve of
 those are `BusinessTransferTest`, which is new.
 
 ```bash

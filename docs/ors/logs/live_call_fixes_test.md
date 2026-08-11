@@ -20,7 +20,7 @@ and a caller who is not treated as somebody else with the same name.
 cd java-backend && mvn clean package
 ```
 
-*Expected:* `BUILD SUCCESS`, `Tests run: 184, Failures: 0, Errors: 0`. Sixteen
+*Expected:* `BUILD SUCCESS`, `Tests run: 208, Failures: 0, Errors: 0`. Sixteen
 came with this pass, including `FarewellSenseTest` — every line in it is from
 the call that prompted this.
 

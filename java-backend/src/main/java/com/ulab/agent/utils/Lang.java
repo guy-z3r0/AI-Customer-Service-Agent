@@ -16,9 +16,10 @@ import java.util.Map;
  *    change to the catalogue and nothing else.
  *
  * The catalogue outgrew one file at three hundred entries. The per-page half of
- * it is in {@link LangPages}, which is package-private and reached only from
- * here: still one catalogue, still one place a wording is changed, in two files
- * because a file may not pass five hundred lines.
+ * it is in {@link LangPages} and the report's own words are in
+ * {@link LangReport}, both package-private and reached only from here: still
+ * one catalogue, still one place a wording is changed, in three files because a
+ * file may not pass five hundred lines.
  *
  * Every UI entry carries both languages. When a Bangla wording is still missing
  * the English is repeated, which reads badly but never leaves a blank screen.
@@ -57,6 +58,8 @@ public final class Lang {
     public static final String ERR_TWILIO_NOT_SET_UP =
             "Telephone calling needs its Twilio settings filled in first.";
     public static final String ERR_VALIDATION = "Some fields need fixing.";
+    public static final String ERR_BAD_PARAMETER =
+            "One of the values in that web address is not the kind of value it should be.";
     public static final String ERR_IMPORT_FORMAT =
             "That file is not a business exported from this app.";
     public static final String ERR_IMPORT_VERSION =
@@ -64,6 +67,8 @@ public final class Lang {
     public static final String ERR_IMPORT_MODE =
             "Choose whether to add a new business or replace an existing one.";
     public static final String ERR_IMPORT_NO_TARGET = "Choose which business to replace.";
+    public static final String ERR_REPORT_RANGE =
+            "A report cannot start after the day it ends on.";
 
     // -------------------------------------------- spoken by Twilio, not by us --
     // These reach a caller through Twilio's own voice, before this app has said
@@ -270,6 +275,7 @@ public final class Lang {
         m.put("soon.action", pair("Go to Businesses", "ব্যবসায় যান"));
 
         LangPages.addAll(m);
+        LangReport.addAll(m);
         return Collections.unmodifiableMap(m);
     }
 

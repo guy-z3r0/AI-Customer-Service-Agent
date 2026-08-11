@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -64,6 +65,26 @@ public class ApiExceptionAdvice {
     public ResponseEntity<Map<String, String>> handleMissing(NoResourceFoundException e) {
         log.debug("Nothing at {}", e.getResourcePath());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body(Lang.ERR_NOT_FOUND, null));
+    }
+
+    /**
+     * A value in the address that is not the kind of value it should be — a
+     * date that is not a date, an id that is not an id.
+     *
+     * Same fault as the one above and found the same way: it fell through to
+     * the catch-all, so mistyping a date in the report's address answered "the
+     * server is broken" and wrote a stack trace, when the truth was that the
+     * caller had asked for something unreadable. The parameter is named in the
+     * detail; the value it was given is not, because it came from outside and
+     * an error page is not a place to hand it back.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Map<String, String>> handleBadParameter(
+            MethodArgumentTypeMismatchException e) {
+        Class<?> wanted = e.getRequiredType();
+        String detail = e.getName() + ": " + (wanted == null ? "?" : wanted.getSimpleName());
+        log.debug("Unreadable value for {}", e.getName());
+        return ResponseEntity.badRequest().body(body(Lang.ERR_BAD_PARAMETER, detail));
     }
 
     @ExceptionHandler(Exception.class)

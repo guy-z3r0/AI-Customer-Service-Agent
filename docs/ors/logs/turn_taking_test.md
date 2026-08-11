@@ -19,7 +19,7 @@ does not talk over you, and a call that ends itself instead of asking for ever.
 cd java-backend && mvn clean package
 ```
 
-*Expected:* `BUILD SUCCESS`, `Tests run: 184, Failures: 0, Errors: 0`.
+*Expected:* `BUILD SUCCESS`, `Tests run: 208, Failures: 0, Errors: 0`.
 
 ```bash
 cd python-voice && python -m pytest

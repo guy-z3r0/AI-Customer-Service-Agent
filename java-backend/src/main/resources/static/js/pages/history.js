@@ -12,6 +12,7 @@
 import { api } from '../api.js';
 import { modeBadge, outcomeBadge } from '../call_outcome.js';
 import { button, element, emptyState, keyValueRow, table, tagBadge } from '../components.js';
+import { openReportRange } from './report_range.js';
 
 const ROLE_HUES = { CALLER: 'azure', AGENT: 'jade', SYSTEM: 'violet' };
 const GOOD_LATENCY_MS = 2000;
@@ -41,6 +42,13 @@ async function renderList(host, ctx) {
         host.appendChild(panel);
         return;
     }
+
+    // A report is made from this list rather than from the rail: it is a thing
+    // you ask for while looking at the calls, not a place you go.
+    const actions = element('div', 'row');
+    actions.appendChild(button(t['report.generate'], 'primary',
+        () => openReportRange(ctx).catch((error) => ctx.toastError(error))));
+    panel.appendChild(actions);
 
     panel.appendChild(table(listColumns(ctx), calls));
     host.appendChild(panel);

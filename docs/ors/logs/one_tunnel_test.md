@@ -20,7 +20,7 @@ audio, and a real call whose voice-server log looks exactly as it always did.
 cd java-backend && mvn clean package
 ```
 
-*Expected:* `BUILD SUCCESS`, `Tests run: 184, Failures: 0, Errors: 0`. Five of
+*Expected:* `BUILD SUCCESS`, `Tests run: 208, Failures: 0, Errors: 0`. Five of
 those came with this pass: four in `TwilioRelayTest` and one in
 `ApiRequiresLoginTest`.
 

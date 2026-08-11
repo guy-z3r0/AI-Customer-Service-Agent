@@ -602,6 +602,55 @@ One rule set here:
   Twilio pushing a whole call's audio into nothing, so whichever end goes first closes the
   other.
 
+## What the report pass changed
+
+The history page answers *what happened on that call*. Nothing answered *what has been
+happening*, and that is the question anyone above the person who took the calls asks. It is
+also the first thing this panel produces that is meant to leave it, which is what made a
+print sheet unavoidable.
+
+```
+  Call history ──▶ Generate report ──▶ #/report/<from>/<to>/<business>
+                                          │  the range is in the address,
+                                          │  so a report is a link
+                                          ▼
+                     GET /api/calls/report?from=&to=&businessId=
+                                          │
+                     CallHistoryService.between ──▶ the same rows the history table shows
+                                          │
+                     CallReportService ───┴─▶ totals · outcomes · languages · days ·
+                                              follow-ups · every call
+                                          ▼
+                              screen ──── Ctrl+P ────▶ print.css ──▶ ink on paper
+```
+
+| Layer | Added or changed |
+|---|---|
+| `api/` | `GET /api/calls/report` on `CallHistoryController`, mapped above `/{callId}` because "report" is a word and not an id — `CallReportRoutingTest` pins that. `ApiExceptionAdvice` answers 400 for a value that will not parse, where it used to answer 500 with a stack trace |
+| `api/dto/` | `ReportDtos` — the report's own shapes, except a call, which is `CallDtos.CallListItem` |
+| `services/` | `CallReportService`, all counting in pure statics so it is testable without a database; `CallHistoryService.between` and a shared `rows` builder |
+| `utils/` | `ReplyTimes` — the latency arithmetic, moved out of `MetricsService` and `CallHistoryService` so the report and the dashboard cannot disagree. `LangReport`, a third catalogue file, because `LangPages` was at 444 of its 500 lines |
+| `static/js/` | `pages/report.js` (the document), `pages/report_range.js` (the dialog), `statTile` promoted into `components.js` from the dashboard |
+| `static/css/` | `print.css`, linked `media="print"`, and the paper tokens it reads in `nocturne.css` |
+| `STYLE-CONTRACT.md` | `print-sheet` appended to section 4 — the contract's own escape valve, used for the first time |
+
+Three rules set here:
+
+- **A report may not disagree with the page it was made from.** Its rows are the history
+  table's rows, its median is the dashboard's median, and its "nobody spoke" is the same rule
+  `call_outcome.js` draws its badge from. Every one of those was a second implementation
+  waiting to drift, and each is now one implementation read from two places.
+- **Paper is not a light theme.** The contract refuses light mode because dark is the design,
+  and that is a rule about screens. Browsers drop background colours when printing, so a
+  Nocturne page on paper is light grey text on white — the choice was never dark against
+  light, it was a readable document against an unreadable one. The escape valve exists for
+  exactly this, so the sheet is a named part with its own values rather than a screen with an
+  exception.
+- **A document has no controls in it.** The range is chosen in a dialog and carried in the
+  address, because a date picker on the page would be a date picker on the printout. For the
+  same reason no row on the report can be clicked into: following a call up is what the
+  history page is for, and a page that only works while the app is open is not a document.
+
 ## Panel screens in contract parts
 
 Named in Nocturne vocabulary so screens are assembled, not invented: shell = `side-rail`
@@ -619,6 +668,11 @@ Dashboard = `stat-tile` strip (one accented number, the median reply time) + cap
 `list-row`s + a screening distribution of `list-row`s with `progress` bars in the data palette
 + recent-calls `table`. Call History = `table` of calls, and one call as `key-value` facts, a
 summary `panel`, the screening steps as `list-row`s and the transcript as a `scroll-region` of
-`list-row`s with role and timing `tag-badge`s. The Twilio dial is a secondary `button` beside
-the primary one, disabled with a tooltip until its credentials are real — the contract's own
-answer for an action that exists but cannot be taken yet.
+`list-row`s with role and timing `tag-badge`s. The report is asked for from a `dialog` off the
+Call History table and drawn as `panel`s: a heading block, a `stat-tile` strip (one accented
+number, the median reply again), three breakdowns of `list-row`s with `tag-badge`s and
+`progress` bars, the follow-ups as `list-row`s, and every call as a `table` — then the whole
+thing again as `print-sheet` when it is printed, which is the only part of the panel that is
+not a screen. The Twilio dial is a secondary `button` beside the primary one, disabled with a
+tooltip until its credentials are real — the contract's own answer for an action that exists
+but cannot be taken yet.

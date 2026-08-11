@@ -7,9 +7,10 @@
 ## Current phase
 Phase 7 — Twilio mode, second business, polish (built and run live, awaiting approval)
 
-**This is the last phase.** All seven in `phases.md` are built. What remains after approval is
-not construction but verification: five of the nine boxes in BUILD_SPEC's definition of done
-need a credential, a microphone or Docker, not more code.
+**This is the last phase.** All seven in `phases.md` are built, and five of the nine boxes in
+BUILD_SPEC's definition of done need a credential, a microphone or Docker rather than more
+code. What has been built since — the setup files, the live-call fixes, the call report — is
+work the phases did not plan for, each with its own test script rather than a phase of its own.
 
 ## Done
 - Planning ✓ — proposal approved WITH CHANGES (swappable LLM providers; placeholder-first setup)
@@ -172,15 +173,60 @@ means Google Cloud. The OneCore renderer added here (`pipeline/tts_windows.py`) 
 its place — it speaks with voices `pyttsx3` refuses outright, verified against Microsoft Mark
 — but it cannot conjure a language Windows does not have.
 
+## Since then — the call report
+Not a fault this time but a missing answer. The history page says what happened on one call;
+nothing said what has been happening, which is the question anyone above the person who took
+the calls asks. Test script: `docs/ors/logs/call_report_test.md`.
+
+- **A report over many calls at once.** **Generate report** on the Call History page asks for
+  a range of days and a business, and `GET /api/calls/report` answers with nine totals, three
+  breakdowns — how the calls turned out, which language, how many each day — every action item
+  the range left behind, and then every call in it so each number above can be checked against
+  the rows it was counted from. `api/dto/ReportDtos`, `services/CallReportService`,
+  `static/js/pages/report.js` and `report_range.js`. The range lives in the address
+  (`#/report/<from>/<to>/<business>`), so a report is a link that comes back the same report.
+- **It cannot disagree with the page it was made from.** Three numbers were about to become
+  second implementations of things that already existed, and each would have drifted:
+  the rows come from `CallHistoryService.between`, the same builder the history table uses;
+  the median comes from the new `utils/ReplyTimes`, which the dashboard and the transcript now
+  read too, so the report and the dashboard give the same millisecond; and "nobody spoke" is
+  the same rule `call_outcome.js` draws its badge from, so a call counted as silent is a call
+  badged as silent. **A call that rang out still holds the mode it opened in** — counting that
+  as a conversation with a new customer would put a conversation that never happened into a
+  document somebody acts on.
+- **The day a call belongs to is decided by the business's own clock**, not the server's. A
+  container running in UTC would file a Dhaka morning under the day before, and this app is
+  written for Dhaka. With every business in scope the active business's timezone stands in.
+- **It prints.** This is the first thing the panel makes that is meant to leave it, and a
+  Nocturne page sent to a printer is light grey text on white — browsers drop background
+  colours by default. So `print-sheet` is appended to **STYLE-CONTRACT.md section 4**, the
+  contract's own escape valve, used for the first time: paper and ink values with their
+  contrast floors, the shell and every button dropped, the accent spent down to ink, and the
+  truncation rules reversed because a cut-off cell on paper cannot be hovered. `css/print.css`
+  is linked `media="print"` and can do nothing at any other time — **there is still no light
+  mode.**
+- **A mistyped date used to answer "Something went wrong on the server."** Found by
+  `CallReportRoutingTest`, not by hand: a value that will not parse fell through to the
+  catch-all and became a 500 with a stack trace in the log. It is a 400 now, which also covers
+  every other typed parameter in the app — `/api/calls/<not-a-uuid>` did the same thing.
+- 208 Java tests, up from 184: `CallReportTest` (11), `ReplyTimesTest` (8),
+  `CallReportRoutingTest` (4) and a case in `ApiRequiresLoginTest`. Python untouched at 51.
+
+**Not verified in a browser yet.** The Java side is tested and the panel modules parse, but
+nobody has looked at the report on screen or in a print preview — a backend was already
+running on 8080 from before these changes, and starting a second one breaks the embedded
+Postgres lock. Sections B–E of the test script are that check.
+
 ## In progress
 Nothing. Waiting for Nanjiba to run `phase_07_test.md`, `turn_taking_test.md`,
-`one_tunnel_test.md`, `business_transfer_test.md` and `live_call_fixes_test.md`, and approve.
+`one_tunnel_test.md`, `business_transfer_test.md`, `live_call_fixes_test.md` and
+`call_report_test.md`, and approve.
 
 ## Blocked
 Nothing blocked.
 
 ## Next action
-**Approval gate.** Five scripts now.
+**Approval gate.** Six scripts now.
 
 1. `docs/ors/logs/turn_taking_test.md`, which covers the nine faults above. Steps 5 (a reply
    that is not cut off), 7 (an agent that does not talk over you) and 9 (a call that ends
@@ -188,7 +234,7 @@ Nothing blocked.
    to `secrets/gcp-credentials.json` before section E** — that one rename is what turns Bangla
    on.
 2. `docs/ors/logs/phase_07_test.md`, steps 1–15, unchanged except that step 1 now expects
-   184 Java tests and 51 Python. Steps 4 (a second business answering as itself), 7 (a
+   208 Java tests and 51 Python. Steps 4 (a second business answering as itself), 7 (a
    stranger no longer mistaken for a customer) and 11 (everything behaving with no Twilio
    credentials) decide that one. **Steps 9–10 now need only one ngrok tunnel**, pointed at
    8080, with that same host in both Public media URL and the TwiML App's request URL.
@@ -203,6 +249,11 @@ Nothing blocked.
    call. Steps 3 (a clock that stops), 5 (an agent that hangs up when it says goodbye) and 7
    (a person fetched only once the agent knows what for) decide it. Step 4 is worth doing
    even though it looks trivial — it is the microphone, and it was the one nobody could see.
+6. `docs/ors/logs/call_report_test.md`, new: the call report. Steps 4 (a range that holds
+   what it says it holds), 6 (a silent call not reported as a conversation) and 12 (a page
+   that prints as a document rather than a screenshot of the app) decide it. **Step 1 now
+   expects 208 Java tests.** Nothing here needs a credential, a microphone or Docker — it is
+   the only one of the six that can be run start to finish on what is already set up.
 
 After that the project is built, and what is left is the definition-of-done sitting:
 
@@ -243,8 +294,9 @@ After that the project is built, and what is left is the definition-of-done sitt
   apply, and both run as uid 10001 rather than root.
 - **The test suite had never actually run on this machine.** Mockito's Byte Buddy did not
   understand Java 25's class files, so the fourteen login tests and both other security suites
-  errored before executing. `byte-buddy.version` is pinned to 1.18.0. **184 Java tests and 51
-  Python now pass**, up from 119 and 32 — the turn-taking pass added `CallEndsItselfTest`,
+  errored before executing. `byte-buddy.version` is pinned to 1.18.0. **208 Java tests and 51
+  Python now pass**, up from 119 and 32 — the report pass added `CallReportTest`,
+  `ReplyTimesTest` and `CallReportRoutingTest`, the turn-taking pass added `CallEndsItselfTest`,
   `InactivityWatchdogTest`, `LanguageSenseTest`, `SlangGuardTest`,
   `test_talking_over_each_other.py` and `test_voice_choices.py`, the one-tunnel fix added
   `TwilioRelayTest` plus a case in `ApiRequiresLoginTest`, the setup-file pass added
@@ -270,18 +322,29 @@ After that the project is built, and what is left is the definition-of-done sitt
   one-tunnel fix added `api/TwilioMediaSocket.java`, which BUILD_SPEC could not have listed:
   it exists because of what a free ngrok account will not do. The setup-file pass added
   `api/dto/TransferDtos.java`, `services/BusinessTransferService.java` and
-  `static/js/pages/business_transfer.js`.
+  `static/js/pages/business_transfer.js`. The report pass added `api/dto/ReportDtos.java`,
+  `services/CallReportService.java`, `utils/ReplyTimes.java`, `utils/LangReport.java`,
+  `static/js/pages/report.js`, `static/js/pages/report_range.js` and `static/css/print.css` —
+  `ReplyTimes` is the one that removed code rather than adding it, taking the latency
+  arithmetic out of two services that each had their own copy.
 - Dependencies added across the whole project: `spring-boot-starter-test` (test scope) and
   `websockets` on the Python side. **No Twilio library on either side** — the access token is
   a JWT signed with `javax.crypto`, and Media Streams is four JSON events. The browser SDK is
   pinned to `cdn.jsdelivr.net/npm/@twilio/voice-sdk@2.18.3`, verified by loading it in a
   browser; the `sdk.twilio.com` path most guides give does **not** resolve.
-- The string catalogue is 312 entries in both languages across `utils/Lang.java` and
-  `utils/LangPages.java`. The only entry without Bengali script is `settings.badge_placeholder`.
-  **The Lang split still needs your decision** — it was Phase 6's open question and is unchanged.
-- **Nothing is committed.** Phases 5, 6 and 7 are uncommitted, and so are three passes over
-  `SECURITY-AUDIT.md`; the last commit is `87883d5`. Each phase log ends with a commit message
-  ready to use. **Do not commit before reading SEC-001** — the two steps that need you are at
-  the top of the audit, and the pre-commit hook that stops a repeat is installed with
+- The string catalogue is 368 entries in both languages across `utils/Lang.java`,
+  `utils/LangPages.java` and now `utils/LangReport.java`. The only entry without Bengali script
+  is `settings.badge_placeholder`. **The Lang split still needs your decision** — it was Phase
+  6's open question, and the report pass has just had to make the same call again: `LangPages`
+  was at 444 of its 500 lines, so a third file was the only way to add thirty-six strings
+  without breaking the cap. That is now twice the split has happened by necessity rather than
+  by decision, and a third page of strings will force it a third time.
+- **Committed up to `593d0ad` (v2.3).** That note used to say nothing was committed and that
+  the last commit was `87883d5`; it had been left behind by the six commits `v1.8`…`v2.3`,
+  which carry phases 5–7, the security passes, the turn-taking pass, the one-tunnel fix, the
+  setup-file pass and the live-call pass. **The report pass is uncommitted** — it is the only
+  thing in the working tree. Each phase log ends with a commit message ready to use.
+  **Do not commit before reading SEC-001** — the two steps that need you are at the top of the
+  audit, and the pre-commit hook that stops a repeat is installed with
   `git config core.hooksPath .githooks`.
 - User (Nanjiba) approves each phase before the next starts.

@@ -18,6 +18,7 @@ import com.ulab.agent.repo.CallSummaryRepository;
 import com.ulab.agent.repo.ClientRepository;
 import com.ulab.agent.repo.ModeTransitionRepository;
 import com.ulab.agent.utils.Lang;
+import com.ulab.agent.utils.ReplyTimes;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +35,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Reading a finished call back: the list, one call in full, and the plain text
@@ -73,32 +75,30 @@ public class CallHistoryService {
     /**
      * The newest calls first.
      *
-     * The turn counts are gathered in one sweep rather than one query per row.
-     * A single operator's call log is small enough that reading it whole costs
-     * less than the round trips would.
-     *
      * @param businessId only this business's calls, or null for all of them
      */
     @Transactional(readOnly = true)
     public List<CallDtos.CallListItem> list(UUID businessId, int limit) {
-        List<CallRecord> found = businessId == null
-                ? calls.findAll()
-                : calls.findByBusinessIdOrderByStartedAtDesc(businessId);
+        return rows(newestFirst(forBusiness(businessId)).limit(Math.max(1, limit)).toList());
+    }
 
-        List<CallRecord> newest = found.stream()
-                .sorted(Comparator.comparing(CallRecord::getStartedAt).reversed())
-                .limit(Math.max(1, limit))
-                .toList();
-        if (newest.isEmpty()) return List.of();
-
-        Names names = namesFor(newest);
-        Map<UUID, Long> turnCounts = turnCounts();
-        Set<UUID> summarised = summaries.findAllById(newest.stream().map(CallRecord::getId).toList())
-                .stream().map(CallSummary::getCallId).collect(Collectors.toSet());
-
-        return newest.stream()
-                .map(call -> toListItem(call, names, turnCounts, summarised.contains(call.getId())))
-                .toList();
+    /**
+     * Every call that started inside a window, newest first.
+     *
+     * A report asks for its calls here rather than gathering its own, because
+     * two ways of turning a call into a row would be two chances for a report
+     * to disagree with the page it was made from.
+     *
+     * @param from the first moment counted, inclusive
+     * @param to   the first moment no longer counted, exclusive — so a range
+     *             ending today still holds everything today
+     */
+    @Transactional(readOnly = true)
+    public List<CallDtos.CallListItem> between(UUID businessId, Instant from, Instant to) {
+        return rows(newestFirst(forBusiness(businessId))
+                .filter(call -> !call.getStartedAt().isBefore(from)
+                        && call.getStartedAt().isBefore(to))
+                .toList());
     }
 
     // ------------------------------------------------------------ one call --
@@ -181,6 +181,36 @@ public class CallHistoryService {
 
     // ------------------------------------------------------------ internals --
 
+    private List<CallRecord> forBusiness(UUID businessId) {
+        return businessId == null
+                ? calls.findAll()
+                : calls.findByBusinessIdOrderByStartedAtDesc(businessId);
+    }
+
+    private static Stream<CallRecord> newestFirst(List<CallRecord> found) {
+        return found.stream().sorted(Comparator.comparing(CallRecord::getStartedAt).reversed());
+    }
+
+    /**
+     * A set of calls as the rows a table shows.
+     *
+     * The names, turn counts and summary flags are gathered in one sweep each
+     * rather than one query per row. A single operator's call log is small
+     * enough that reading it whole costs less than the round trips would.
+     */
+    private List<CallDtos.CallListItem> rows(List<CallRecord> page) {
+        if (page.isEmpty()) return List.of();
+
+        Names names = namesFor(page);
+        Map<UUID, Long> turnCounts = turnCounts();
+        Set<UUID> summarised = summaries.findAllById(page.stream().map(CallRecord::getId).toList())
+                .stream().map(CallSummary::getCallId).collect(Collectors.toSet());
+
+        return page.stream()
+                .map(call -> toListItem(call, names, turnCounts, summarised.contains(call.getId())))
+                .toList();
+    }
+
     /** Business and customer names for a page of calls, in two queries. */
     private Names namesFor(List<CallRecord> page) {
         Map<UUID, String> businessNames = businesses.findAll().stream()
@@ -233,12 +263,7 @@ public class CallHistoryService {
         return new CallDtos.TranscriptLine(message.getSeq(), message.getRole().name(),
                 message.getText(), message.getLanguage() == null ? null : message.getLanguage().name(),
                 message.getModeAtTime() == null ? null : message.getModeAtTime().name(),
-                replyMillis(message));
-    }
-
-    private static Long replyMillis(CallMessage message) {
-        if (message.getTSttFinal() == null || message.getTTtsFirst() == null) return null;
-        return Duration.between(message.getTSttFinal(), message.getTTtsFirst()).toMillis();
+                ReplyTimes.forMessage(message));
     }
 
     private static CallDtos.TransitionView toTransition(ModeTransition transition) {
@@ -270,7 +295,8 @@ public class CallHistoryService {
         return fields;
     }
 
-    private static List<String> readList(String json) {
+    /** Also read by {@link CallReportService}, which gathers action items across many calls. */
+    static List<String> readList(String json) {
         List<String> items = new ArrayList<>();
         JsonElement parsed = parse(json);
         if (parsed == null || !parsed.isJsonArray()) return items;

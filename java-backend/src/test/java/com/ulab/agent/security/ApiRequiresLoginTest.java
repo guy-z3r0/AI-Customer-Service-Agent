@@ -59,6 +59,9 @@ class ApiRequiresLoginTest {
             "/api/health",
             "/api/businesses",
             "/api/calls",
+            // The report is every call at once, so it is the one path here that
+            // would hand a stranger the whole history in a single request.
+            "/api/calls/report",
             "/api/twilio/token",
             "/",
             "/js/app.js"

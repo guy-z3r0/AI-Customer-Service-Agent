@@ -79,6 +79,28 @@ export function table(columns, rows) {
     return wrap;
 }
 
+/**
+ * One number and its label.
+ *
+ * The contract allows exactly one tile per screen to put its value in the
+ * accent — the single number that matters — so `accent` is the caller's to
+ * spend and this builder does not spend it for them.
+ *
+ * @param options { accent, quiet } — quiet is a tile with nothing to report
+ *                yet, said at a size that does not shout
+ */
+export function statTile(label, value, options = {}) {
+    const tile = element('div', 'stat-tile');
+    tile.appendChild(element('div', 'stat-tile__label', label));
+
+    let valueClass = 'stat-tile__value';
+    if (options.quiet) valueClass += ' stat-tile__value--quiet';
+    else if (options.accent) valueClass += ' stat-tile__value--accent';
+
+    tile.appendChild(element('div', valueClass, value));
+    return tile;
+}
+
 /** The contract's empty state: one line naming the space, one primary action. */
 export function emptyState(line, actionLabel, onAction) {
     const node = element('div', 'empty-state');
