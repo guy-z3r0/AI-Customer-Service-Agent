@@ -20,8 +20,9 @@ audio, and a real call whose voice-server log looks exactly as it always did.
 cd java-backend && mvn clean package
 ```
 
-*Expected:* `BUILD SUCCESS`, `Tests run: 153, Failures: 0, Errors: 0`. Five of
-those are new: four in `TwilioRelayTest` and one in `ApiRequiresLoginTest`.
+*Expected:* `BUILD SUCCESS`, `Tests run: 165, Failures: 0, Errors: 0`. Five of
+those came with this pass: four in `TwilioRelayTest` and one in
+`ApiRequiresLoginTest`.
 
 ```bash
 cd python-voice && python -m pytest

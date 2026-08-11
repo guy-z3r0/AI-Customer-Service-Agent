@@ -221,6 +221,16 @@ line saying no voice speaks Bangla, that is this. Two ways out:
   `bn-IN` voices are far better than anything offline. Recognition uses
   `bn-BD`; the voice uses `bn-IN`, because that is where Google has Bangla
   voices.
+
+**Why the Bangla voice menu offers nothing from Bangladesh.** Google publishes
+no `bn-BD` voice at all. Asked for its catalogue it returns 38 Bengali voices
+and every one of them is `bn-IN` — four Standard, four WaveNet and thirty
+Chirp 3 HD. That is not this app filtering the list: the menu shows exactly what
+Google returns, and a Bangladeshi Bengali voice is not in it from any provider
+this app can reach. Understanding what a caller *says* is the other way round
+and does use `bn-BD`, which Google does support, so a caller from Dhaka is
+recognised as one and answered in an Indian Bengali voice. Settings says this
+under the menu so it is not mistaken for a fault.
 - **A Windows Bangla voice** — Settings → Time & language → Language & region →
   **Add a language** → বাংলা, and tick **Speech** among the optional features.
   Then restart the voice server so it re-reads the list. Availability varies by
@@ -371,6 +381,34 @@ sentence the agent says a minute later, with no restart.
 A business may also name its own model provider on the Persona tab, overruling
 the Settings page for its calls alone. Leave those two fields blank unless you
 have a reason.
+
+### Moving a whole business as a file
+
+Setting a business up is an afternoon of typing, and it does not have to be done
+twice. On the **Businesses** page:
+
+- **Download setup**, on any row, saves everything those six tabs hold as
+  `business-<handle>.json` — the name and contact details, all four knowledge
+  sections in their order, the persona and both greetings, the opening hours,
+  and the handover contacts.
+- **Import a setup file** reads one back. You are asked what to do with it:
+  - **Add it as a new business** creates one beside what you already have. It
+    gets its own handle, and it is not made active.
+  - **Replace an existing business** empties the one you choose — knowledge,
+    persona, hours, handover contacts — and puts the file's own in their place.
+
+**What is not in the file:** customers, and call history. A business's knowledge
+is not personal data and its customer list is, so the two do not travel
+together; customers stay on the Clients page. Nor is the active flag, so
+importing can never decide which business answers the next call.
+
+A downloaded file goes back in unedited — that is the point of it, and the test
+script checks exactly that. It is also plain, indented JSON, so editing a
+service or a price in a text editor and importing the result is a perfectly good
+way to work. Two things in it are read but never applied: `slug` and
+`exportedAt`, which describe where the file came from rather than what should
+happen to it. A file this app did not write is refused by name rather than
+half-understood.
 
 ---
 

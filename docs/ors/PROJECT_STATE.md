@@ -37,7 +37,7 @@ need a credential, a microphone or Docker, not more code.
   → every phase has its log and test script in `docs/ors/logs/`
 
 ## Since Phase 7 was written — six fixes from Nanjiba's own testing
-*(and a seventh at the end of this list, added after the turn-taking pass below)*
+*(and three more at the end of this list, added after the turn-taking pass below)*
 - **Silence was measured from the wrong moment.** The clock ran from when the call
   connected, while the agent was still reading the greeting, so a 15/30 setting warned after
   ~3 seconds of real silence and hung up after ~18. The voice server now reports `agent_done`
@@ -55,6 +55,26 @@ need a credential, a microphone or Docker, not more code.
   screening mode is untouched, because what the machine decided is still a fact about the call.
 - **SETUP.md** now carries the speech, voice, email and telephony walkthroughs in full, plus
   the call-behaviour timings.
+- **A business can be downloaded and uploaded as one file.** Setting one up is an afternoon of
+  typing and it did not travel: no backup, no second machine, no handing a finished setup to
+  somebody else. **Download setup** on a Businesses row writes everything the six editor tabs
+  hold as `business-<handle>.json`; **Import a setup file** reads one back, either as a new
+  business or over an existing one, which empties that business's knowledge, persona, hours and
+  handover contacts first. Customers and call history are deliberately not in the file — a
+  business's knowledge is not personal data and its customer list is — and neither is the
+  active flag. `api/dto/TransferDtos`, `services/BusinessTransferService`, and
+  `static/js/pages/business_transfer.js`; every write goes through the same two services the
+  editor's own forms post to, so a file cannot put anything in the database that could not be
+  typed into the panel. **A round trip found a real bug that no unit test would have:** the
+  seeded escalation contact is `PLACEHOLDER_ESCALATION_EMAIL`, `@Email` refused it, and so the
+  app refused its own downloaded file — which is the first thing anyone tries. Verified end to
+  end against a real Postgres: export → import → export is byte-identical, Bangla and all.
+- **The Bangla voice menu shows only Indian voices because those are the only ones there.**
+  Asked for its catalogue with Nanjiba's own key, Google returns 38 Bengali voices — four
+  Standard, four WaveNet, thirty Chirp 3 HD — and every one is `bn-IN`. There is no `bn-BD`
+  voice to list, from Google or from Windows, and the panel was not filtering anything. What
+  changed is that Settings now says so under the menu, and says in the same breath that
+  recognition does use `bn-BD` — so the pair no longer looks like an oversight.
 - **A Twilio call needed two public tunnels, and a free ngrok account has one.** The webhook
   wants 8080 and the media stream wanted 8090; asked for two, ngrok gives one hostname and the
   second tunnel quietly lands on the first, so Twilio's requests reach the wrong service. The
@@ -120,14 +140,14 @@ its place — it speaks with voices `pyttsx3` refuses outright, verified against
 — but it cannot conjure a language Windows does not have.
 
 ## In progress
-Nothing. Waiting for Nanjiba to run `phase_07_test.md`, `turn_taking_test.md` and
-`one_tunnel_test.md`, and approve.
+Nothing. Waiting for Nanjiba to run `phase_07_test.md`, `turn_taking_test.md`,
+`one_tunnel_test.md` and `business_transfer_test.md`, and approve.
 
 ## Blocked
 Nothing blocked.
 
 ## Next action
-**Approval gate.** Three scripts now.
+**Approval gate.** Four scripts now.
 
 1. `docs/ors/logs/turn_taking_test.md`, which covers the nine faults above. Steps 5 (a reply
    that is not cut off), 7 (an agent that does not talk over you) and 9 (a call that ends
@@ -135,7 +155,7 @@ Nothing blocked.
    to `secrets/gcp-credentials.json` before section E** — that one rename is what turns Bangla
    on.
 2. `docs/ors/logs/phase_07_test.md`, steps 1–15, unchanged except that step 1 now expects
-   153 Java tests and 51 Python. Steps 4 (a second business answering as itself), 7 (a
+   165 Java tests and 51 Python. Steps 4 (a second business answering as itself), 7 (a
    stranger no longer mistaken for a customer) and 11 (everything behaving with no Twilio
    credentials) decide that one. **Steps 9–10 now need only one ngrok tunnel**, pointed at
    8080, with that same host in both Public media URL and the TwiML App's request URL.
@@ -143,6 +163,9 @@ Nothing blocked.
    tunnel carrying both the webhook and the audio) and 6 (a real call, with the voice
    server's own log unchanged) decide it. **This is the script no part of the project has
    ever passed** — it is where a telephone is met for the first time.
+4. `docs/ors/logs/business_transfer_test.md`, new: a business downloaded as a file and put
+   back. Steps 3 (a file that goes back in unedited) and 5 (a replace run twice that does not
+   double anything) decide it. Section E is the Bangla voice list, which needs the Google key.
 
 After that the project is built, and what is left is the definition-of-done sitting:
 
@@ -183,7 +206,7 @@ After that the project is built, and what is left is the definition-of-done sitt
   apply, and both run as uid 10001 rather than root.
 - **The test suite had never actually run on this machine.** Mockito's Byte Buddy did not
   understand Java 25's class files, so the fourteen login tests and both other security suites
-  errored before executing. `byte-buddy.version` is pinned to 1.18.0. **153 Java tests and 51
+  errored before executing. `byte-buddy.version` is pinned to 1.18.0. **165 Java tests and 51
   Python now pass**, up from 119 and 32 — the turn-taking pass added `CallEndsItselfTest`,
   `InactivityWatchdogTest`, `LanguageSenseTest`, `SlangGuardTest`,
   `test_talking_over_each_other.py` and `test_voice_choices.py`, and the one-tunnel fix added
@@ -206,7 +229,9 @@ After that the project is built, and what is left is the definition-of-done sitt
   `static/js/pages/call_stats.js` — the first two are `ConversationBrain` split at 532 lines to
   get back under the 500-line cap, and the last is `live_call.js` for the same reason. The
   one-tunnel fix added `api/TwilioMediaSocket.java`, which BUILD_SPEC could not have listed:
-  it exists because of what a free ngrok account will not do.
+  it exists because of what a free ngrok account will not do. The setup-file pass added
+  `api/dto/TransferDtos.java`, `services/BusinessTransferService.java` and
+  `static/js/pages/business_transfer.js`.
 - Dependencies added across the whole project: `spring-boot-starter-test` (test scope) and
   `websockets` on the Python side. **No Twilio library on either side** — the access token is
   a JWT signed with `javax.crypto`, and Media Streams is four JSON events. The browser SDK is

@@ -508,6 +508,38 @@ Three rules set here:
 - **The model is asked, not relied on, for what can be measured.** Which language a caller is
   speaking is written in their words; the agent follows that whether or not the model notices.
 
+## What the setup-file pass changed
+
+A business can be downloaded and uploaded. Nothing about a call changed; what changed is that
+the afternoon of typing behind one is now portable.
+
+```
+  Businesses ──▶ GET /api/businesses/{id}/export ──▶ business-<handle>.json
+                                                       │  business · persona
+                                                       │  knowledge[] · escalationContacts[]
+                                                       ▼
+                 POST /api/businesses/import  ◀── add ─┤ a new business, its own handle
+                          │                            └ replace ─▶ an existing one, emptied first
+                          ▼
+        BusinessService + KbService — the same two the editor's own forms post to
+```
+
+| Layer | Added or changed |
+|---|---|
+| `api/dto/` | `TransferDtos` — one record used in both directions, so an export shape and an import shape cannot drift apart |
+| `services/` | `BusinessTransferService` — a coordinator that validates nothing itself; the two repositories it does touch directly are for the bulk deletes a replace needs |
+| `repo/` | `KbEntryRepository` and `EscalationContactRepository` gain a JPQL bulk delete — a derived delete would be flushed *after* the inserts that follow it |
+| `static/js/` | `pages/business_transfer.js` — the download anchor and the import dialog, out of `businesses.js` because the page owns the row and this owns the file |
+
+Two rules set here:
+
+- **A file cannot say anything the panel could not.** Every write goes through the services the
+  editor posts to, so the import path adds no second way into the database and no second set of
+  rules about what may be in it.
+- **What travels is the business, not the installation.** Customers, call history, the handle
+  and the active flag all stay behind: the first two because a knowledge base is not personal
+  data, the last two because they are this machine's answers rather than the file's.
+
 ## What the one-tunnel fix changed
 
 Not a phase either — one fault, and it is not in the code but in what the code assumed the

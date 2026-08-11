@@ -167,7 +167,18 @@ function voiceField(entry, ctx, catalogue) {
 
     const wrap = element('div');
     wrap.appendChild(select);
+    // Said under the menu rather than left for the operator to work out from a
+    // list of names: every Bengali voice on offer is Indian, and looking for a
+    // Bangladeshi one is otherwise a hunt through a list it is not in.
+    if (language === 'bn' && suitable.some(isGoogle)) {
+        wrap.appendChild(element('div', 'caption muted-body',
+            ctx.strings['settings.bangla_voice_is_indian']));
+    }
     return wrap;
+}
+
+function isGoogle(voice) {
+    return voice.provider === 'gcp';
 }
 
 /**

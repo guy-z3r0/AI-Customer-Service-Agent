@@ -57,6 +57,13 @@ public final class Lang {
     public static final String ERR_TWILIO_NOT_SET_UP =
             "Telephone calling needs its Twilio settings filled in first.";
     public static final String ERR_VALIDATION = "Some fields need fixing.";
+    public static final String ERR_IMPORT_FORMAT =
+            "That file is not a business exported from this app.";
+    public static final String ERR_IMPORT_VERSION =
+            "That file was written by a newer version of this app than the one running.";
+    public static final String ERR_IMPORT_MODE =
+            "Choose whether to add a new business or replace an existing one.";
+    public static final String ERR_IMPORT_NO_TARGET = "Choose which business to replace.";
 
     // -------------------------------------------- spoken by Twilio, not by us --
     // These reach a caller through Twilio's own voice, before this app has said
@@ -183,6 +190,29 @@ public final class Lang {
         m.put("businesses.field_address", pair("Address", "ঠিকানা"));
         m.put("businesses.field_timezone", pair("Time zone", "টাইম জোন"));
 
+        // Moving a whole business between machines. "Setup file" rather than
+        // "backup": it holds what the business says, not its customers or its
+        // calls, and calling it a backup would imply those were in it too.
+        m.put("transfer.download", pair("Download setup", "সেটআপ ডাউনলোড"));
+        m.put("transfer.upload", pair("Import a setup file", "সেটআপ ফাইল আমদানি"));
+        m.put("transfer.title", pair("Import a business setup file", "ব্যবসার সেটআপ ফাইল আমদানি"));
+        m.put("transfer.note", pair(
+                "A file downloaded from this page: what the business says, its persona, its hours and who takes a handover. Customers and call history are not in it.",
+                "এই পেজ থেকে ডাউনলোড করা ফাইল: ব্যবসাটি কী বলে, তার পরিচয়, সময়সূচি এবং হ্যান্ডওভার কে নেয়। গ্রাহক ও কল ইতিহাস এতে নেই।"));
+        m.put("transfer.mode", pair("What to do with it", "এটি দিয়ে কী করা হবে"));
+        m.put("transfer.mode_add", pair("Add it as a new business", "নতুন ব্যবসা হিসেবে যোগ করুন"));
+        m.put("transfer.mode_replace", pair("Replace an existing business",
+                "বিদ্যমান একটি ব্যবসা প্রতিস্থাপন করুন"));
+        m.put("transfer.target", pair("Which business to replace", "কোন ব্যবসাটি প্রতিস্থাপন হবে"));
+        m.put("transfer.replace_warning", pair(
+                "Replacing empties that business's knowledge, persona, hours and handover contacts first, and puts the file's own in their place. Its customers and call history are untouched.",
+                "প্রতিস্থাপন করলে ওই ব্যবসার জ্ঞানভাণ্ডার, পরিচয়, সময়সূচি ও হ্যান্ডওভার যোগাযোগ আগে মুছে ফাইলেরগুলো বসানো হয়। গ্রাহক ও কল ইতিহাস অপরিবর্তিত থাকে।"));
+        m.put("transfer.choose_file", pair("Choose a file", "ফাইল নির্বাচন করুন"));
+        m.put("transfer.not_json", pair("That file is not readable JSON.",
+                "ওই ফাইলটি পাঠযোগ্য JSON নয়।"));
+        m.put("transfer.imported", pair("%s imported — %s knowledge entries",
+                "%s আমদানি হয়েছে — %s টি জ্ঞান এন্ট্রি"));
+
         // settings page
         m.put("settings.title", pair("Settings", "সেটিংস"));
         m.put("settings.note", pair(
@@ -207,6 +237,15 @@ public final class Lang {
         m.put("settings.voice_none_installed", pair("No voice installed for this language",
                 "এই ভাষার জন্য কোনো কণ্ঠ ইনস্টল করা নেই"));
         m.put("settings.voice_absent", pair("not installed here", "এই মেশিনে নেই"));
+        // Why the Bangla menu offers nothing from Bangladesh. Google publishes
+        // no bn-BD voice at all — every Bengali voice in its catalogue is
+        // bn-IN — and an operator looking for one needs to be told that rather
+        // than left hunting through a list it is not in. Recognition is the
+        // other way round and does use bn-BD, which is worth saying in the same
+        // breath so the pair does not look like an oversight.
+        m.put("settings.bangla_voice_is_indian", pair(
+                "Google publishes no Bangladeshi Bengali (bn-BD) voice — every Bengali voice it offers is Indian (bn-IN), so that is what this list can hold. Understanding what a caller says does use bn-BD.",
+                "গুগল বাংলাদেশি বাংলা (bn-BD) কণ্ঠ প্রকাশ করে না — তাদের সব বাংলা কণ্ঠই ভারতীয় (bn-IN), তাই এই তালিকায় সেগুলোই থাকে। কলার কী বলছেন তা বোঝার জন্য কিন্তু bn-BD ব্যবহার করা হয়।"));
         // Why Google is switched off, said where the operator can act on it.
         // A missing key file is by far the most common reason Bangla sounds
         // wrong, and it used to show as nothing at all — the app degraded

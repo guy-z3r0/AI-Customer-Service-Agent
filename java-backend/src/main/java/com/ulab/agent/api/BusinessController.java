@@ -2,9 +2,13 @@ package com.ulab.agent.api;
 
 import com.ulab.agent.api.dto.BusinessUpsertRequest;
 import com.ulab.agent.api.dto.BusinessView;
+import com.ulab.agent.api.dto.TransferDtos;
 import com.ulab.agent.services.BusinessService;
+import com.ulab.agent.services.BusinessTransferService;
 import jakarta.validation.Valid;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,9 +29,11 @@ import java.util.UUID;
 public class BusinessController {
 
     private final BusinessService businesses;
+    private final BusinessTransferService transfer;
 
-    public BusinessController(BusinessService businesses) {
+    public BusinessController(BusinessService businesses, BusinessTransferService transfer) {
         this.businesses = businesses;
+        this.transfer = transfer;
     }
 
     @GetMapping
@@ -67,5 +73,33 @@ public class BusinessController {
     @PostMapping("/{id}/activate")
     public BusinessView activate(@PathVariable UUID id) {
         return businesses.activate(id);
+    }
+
+    // ------------------------------------------------------ the whole business --
+
+    /**
+     * The business as a file: everything the editor's six tabs hold.
+     *
+     * An attachment rather than a page, so the browser saves it under a name
+     * that says which business it is — the same arrangement the call transcript
+     * download uses, and for the same reason.
+     */
+    @GetMapping("/{id}/export")
+    public ResponseEntity<TransferDtos.BusinessDocument> export(@PathVariable UUID id) {
+        TransferDtos.BusinessDocument document = transfer.export(id);
+        ContentDisposition attachment = ContentDisposition.attachment()
+                .filename(BusinessTransferService.fileNameFor(document.slug())).build();
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Content-Disposition", attachment.toString())
+                .body(document);
+    }
+
+    /** Reads one of those files back, as a new business or over an existing one. */
+    @PostMapping("/import")
+    public TransferDtos.ImportResultView importBusiness(
+            @Valid @RequestBody TransferDtos.ImportRequest request) {
+        return transfer.importDocument(request);
     }
 }

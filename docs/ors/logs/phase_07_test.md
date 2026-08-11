@@ -24,7 +24,7 @@ behaving with no Twilio credentials at all.
 cd java-backend && mvn clean package
 ```
 
-*Expected:* `BUILD SUCCESS`, `Tests run: 153, Failures: 0, Errors: 0`.
+*Expected:* `BUILD SUCCESS`, `Tests run: 165, Failures: 0, Errors: 0`.
 
 ```bash
 cd python-voice && python -m pytest

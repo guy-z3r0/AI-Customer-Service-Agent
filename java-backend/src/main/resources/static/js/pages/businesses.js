@@ -9,6 +9,7 @@
 
 import { api } from '../api.js';
 import { Form, button, confirm, dialog, element, emptyState, table, tagBadge } from '../components.js';
+import { downloadLink, pickFile } from './business_transfer.js';
 
 export async function renderBusinesses(host, ctx) {
     const businesses = await api.get('/api/businesses');
@@ -21,19 +22,26 @@ export async function renderBusinesses(host, ctx) {
     if (businesses.length === 0) {
         panel.appendChild(emptyState(t['businesses.empty'], t['businesses.new'],
             () => openForm(null, ctx)));
-        host.appendChild(panel);
-        return;
+    } else {
+        panel.appendChild(table(columns(ctx), businesses));
     }
 
-    panel.appendChild(table(columns(ctx), businesses));
     panel.appendChild(element('hr', 'divider'));
+    panel.appendChild(actionRow(ctx, businesses));
+    host.appendChild(panel);
+}
 
+/**
+ * The actions are shown even with nothing in the table: an empty database is
+ * exactly when somebody has a setup file and no business to put it beside.
+ */
+function actionRow(ctx, businesses) {
+    const t = ctx.strings;
     const actions = element('div', 'row row--end');
     actions.appendChild(button(t['businesses.import'], 'ghost', () => runImport(ctx)));
+    actions.appendChild(button(t['transfer.upload'], 'secondary', () => pickFile(ctx, businesses)));
     actions.appendChild(button(t['businesses.new'], 'primary', () => openForm(null, ctx)));
-    panel.appendChild(actions);
-
-    host.appendChild(panel);
+    return actions;
 }
 
 function columns(ctx) {
@@ -60,6 +68,7 @@ function actionCell(business, ctx) {
     row.appendChild(button(ctx.strings['businesses.open_editor'], 'secondary',
         () => ctx.goTo(`business_editor/${business.id}`)));
     row.appendChild(button(ctx.strings['common.edit'], 'ghost', () => openForm(business, ctx)));
+    row.appendChild(downloadLink(business, ctx.strings));
     row.appendChild(button(ctx.strings['common.delete'], 'ghost', () => remove(business, ctx)));
     return row;
 }
