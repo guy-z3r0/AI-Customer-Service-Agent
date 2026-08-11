@@ -48,4 +48,35 @@ class ClientMatchingTest {
         assertTrue(ClientService.sameNumber("+8801711111111", "111111"),
                 "six is the agreed line, and it is a real suffix of that number");
     }
+
+    // ------------------------------------------------------------ the name --
+
+    @Test
+    void thePartOfTheirNameACallerSaysMatchesTheWholeOfIt() {
+        // Nobody reads their own record out. A rule that wanted the full name
+        // as filed would be a rule no real caller could satisfy.
+        assertTrue(ClientService.sameName("Sadman Sakib", "Sadman"));
+        assertTrue(ClientService.sameName("Sadman", "Sadman Sakib"));
+        assertTrue(ClientService.sameName("Sadman Sakib", "sadman sakib"));
+        assertTrue(ClientService.sameName("Md. Sadman Sakib", "Sadman Sakib"));
+        assertTrue(ClientService.sameName("সাদমান সাকিব", "সাদমান"));
+    }
+
+    @Test
+    void adifferentPersonWithSomeOfTheSameNameDoesNotMatch() {
+        // Two Sadmans on one customer list is the ordinary case, not the odd
+        // one, which is the whole reason a number alone was not enough either.
+        assertFalse(ClientService.sameName("Sadman Sakib", "Sadman Rahman"));
+        assertFalse(ClientService.sameName("Sadman Sakib", "Rahim"));
+        assertFalse(ClientService.sameName("Rahim Uddin", "Karim Uddin"));
+    }
+
+    @Test
+    void noNameMatchesNobody() {
+        assertFalse(ClientService.sameName("Sadman Sakib", null));
+        assertFalse(ClientService.sameName("Sadman Sakib", "   "));
+        assertFalse(ClientService.sameName(null, "Sadman"));
+        assertFalse(ClientService.sameName("Sadman Sakib", "[MASKED_NAME]"),
+                "punctuation is not a name, and a mask must match nobody");
+    }
 }

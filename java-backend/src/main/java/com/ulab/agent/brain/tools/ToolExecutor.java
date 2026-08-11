@@ -35,6 +35,9 @@ public class ToolExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(ToolExecutor.class);
 
+    /** How many words of "what the matter is" an escalation has to carry. */
+    private static final int MEANINGFUL_DETAIL_WORDS = 4;
+
     private final CallModeMachine modes;
     private final CallLogService callLog;
     private final ClientService clients;
@@ -57,7 +60,7 @@ public class ToolExecutor {
             case ToolRegistry.END_CALL -> endCall(session, text(arguments, "reason"));
             case ToolRegistry.LOOKUP_CLIENT -> lookupClient(session,
                     text(arguments, "clientCode"), text(arguments, "phone"),
-                    text(arguments, "phoneLastFour"));
+                    text(arguments, "phoneLastFour"), text(arguments, "name"));
             case ToolRegistry.CREATE_CLIENT -> createClient(session, text(arguments, "name"),
                     text(arguments, "phone"), text(arguments, "request"));
             case ToolRegistry.LOG_REQUEST -> logRequest(session, text(arguments, "summary"));
@@ -90,12 +93,22 @@ public class ToolExecutor {
      * code handed a stranger a real customer's name; now the tool only confirms
      * or denies, and the name reaches the agent through the caller record on
      * the next turn, once the call is already tied to that customer.
+     *
+     * The name is now a third requirement rather than a nicety. A number on its
+     * own was treated as proof, and a number is not: handsets are shared, numbers
+     * are reassigned, and one wrong digit read out over a bad line lands on
+     * somebody else's record — which the caller would then be greeted from. Two
+     * facts that agree is the rule, and asking for a name costs one sentence.
      */
     private String lookupClient(CallSession session, String clientCode,
-                                String phone, String phoneLastFour) {
+                                String phone, String phoneLastFour, String name) {
         if (session.lookupsExhausted()) {
             return refused("this call has already guessed wrong too many times; "
                     + "carry on as an unknown caller and take their details instead");
+        }
+        if (!notBlank(name)) {
+            return refused("a number is not enough on its own. Ask the caller for their name "
+                    + "as well, and send both");
         }
 
         UUID businessId = session.business().getId();
@@ -112,9 +125,17 @@ public class ToolExecutor {
                     ? ". That was the last attempt this call may make." : "")
                     + " (attempt " + attempts + ")");
         }
+        if (!ClientService.sameName(found.get().name(), name)) {
+            // Deliberately vague about which half was wrong: saying "the number
+            // is ours but the name is not" tells a guesser they found a real
+            // customer, which is most of the way to being one.
+            int attempts = session.recordFailedLookup();
+            return refused("that did not match anybody. Check the name and the number with "
+                    + "the caller (attempt " + attempts + ")");
+        }
 
         ClientDtos.ClientView client = found.get();
-        identify(session, client);
+        identify(session, client, true);
         modes.apply(session, CallMode.EXISTING_CUSTOMER, "the caller proved who they are");
 
         // Deliberately no name: confirming identity and disclosing it are two
@@ -135,6 +156,15 @@ public class ToolExecutor {
         return value != null && !value.isBlank();
     }
 
+    /**
+     * Writes down somebody the records did not have.
+     *
+     * It checks the number first. Writing a second record for a customer who is
+     * already on the books gives a business two histories for one person and
+     * whoever rings them back the wrong one — and it is easy to do, because a
+     * caller who never mentions being a customer is a stranger as far as the
+     * conversation goes.
+     */
     private String createClient(CallSession session, String name, String phone, String request) {
         if (name == null || name.isBlank()) return refused("a new record needs a name");
         if (session.client() != null) {
@@ -142,10 +172,20 @@ public class ToolExecutor {
                     + session.client().clientCode());
         }
 
+        Optional<ClientDtos.ClientView> already =
+                clients.byPhone(session.business().getId(), phone);
+        if (already.isPresent()) {
+            return refused("that number is already on the records. Check the name with the "
+                    + "caller and use lookup_client with the name and the number instead");
+        }
+
         ClientDtos.ClientView created = clients.create(session.business().getId(),
                 new ClientDtos.ClientUpsertRequest(null, name, phone, null, null,
                         request == null || request.isBlank() ? List.of() : List.of(request)));
-        identify(session, created);
+        // Written down, not recognised: the panel says which, because a note
+        // reading "Recognised: Sadman" over a record created ten seconds ago is
+        // the app claiming to know something it has just been told.
+        identify(session, created, false);
 
         return result(true, "clientCode", created.clientCode(), "name", created.name());
     }
@@ -161,10 +201,15 @@ public class ToolExecutor {
         return result(true, "clientCode", session.client().clientCode());
     }
 
-    /** Ties the call to a customer, on the session and on the call's own row. */
-    private void identify(CallSession session, ClientDtos.ClientView client) {
+    /**
+     * Ties the call to a customer, on the session and on the call's own row.
+     *
+     * @param recognised true when the caller was found on the records, false
+     *                   when the record is one this call has just written
+     */
+    private void identify(CallSession session, ClientDtos.ClientView client, boolean recognised) {
         session.setClient(client);
-        callLog.recordClient(session.callId(), client.id(), client.name());
+        callLog.recordClient(session.callId(), client.id(), client.name(), recognised);
     }
 
     // ---------------------------------------------------------------- tools --
@@ -205,11 +250,24 @@ public class ToolExecutor {
      * ends, and the reason given here is what that email says. Details the
      * caller gave go into the transcript as their own line, so they travel with
      * the call whether it is read on screen or in the email.
+     *
+     * It refuses an escalation that cannot say what the matter is. On a real
+     * call somebody said "I want to talk with your manager", was escalated on
+     * that sentence alone, and the colleague was handed a call with nothing in
+     * it but the request itself — nothing to prepare for, and nothing the agent
+     * might have answered on the spot. Asking what it is about is the agent's
+     * job, and this is what makes it do that job before handing the call on.
      */
     private String escalate(CallSession session, String reason, String details) {
         String why = reason == null || reason.isBlank() ? "the caller needs a person" : reason;
         boolean alreadyHandedOver = session.mode() == CallMode.COMPLEX_REQUEST;
 
+        if (!alreadyHandedOver && !saysWhatTheMatterIs(details)) {
+            return refused("nothing here says what the caller actually needs. Ask them what "
+                    + "the matter is about and let them explain it, try to answer it from the "
+                    + "knowledge you have, and only then call this again with what they told "
+                    + "you in details. Do not tell them you are handing the call over yet.");
+        }
         if (!alreadyHandedOver && modes.apply(session, CallMode.COMPLEX_REQUEST, why) == null) {
             return refused(Lang.ERR_MODE_NOT_ALLOWED);
         }
@@ -219,6 +277,19 @@ public class ToolExecutor {
         }
         return result(true, "mode", CallMode.COMPLEX_REQUEST.name(),
                 "alreadyHandedOver", alreadyHandedOver);
+    }
+
+    /**
+     * The floor under what a colleague is owed: a sentence about the problem.
+     *
+     * Words rather than characters, because "manager" and "urgent" are each a
+     * detail field that says nothing. It is a floor and not a judgement of
+     * quality — a model determined to write four empty words can still do so —
+     * but it costs the model a turn to get past, and that turn is spent asking
+     * the caller, which is the whole point.
+     */
+    private static boolean saysWhatTheMatterIs(String details) {
+        return details != null && details.strip().split("\\s+").length >= MEANINGFUL_DETAIL_WORDS;
     }
 
     private String endCall(CallSession session, String reason) {

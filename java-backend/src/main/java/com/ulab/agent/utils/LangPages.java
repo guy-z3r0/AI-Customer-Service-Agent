@@ -281,6 +281,11 @@ final class LangPages {
         m.put("livecall.caller", pair("Caller", "কলার"));
         m.put("livecall.caller_unknown", pair("Not recognised yet", "এখনও চেনা যায়নি"));
         m.put("livecall.caller_found", pair("Recognised: %s", "চেনা গেছে: %s"));
+        // Not the same thing as the line above, and it used to say so anyway:
+        // a record written during this call is what the caller said their name
+        // is, not somebody the records knew.
+        m.put("livecall.caller_written_down", pair("Written down as a new customer: %s",
+                "নতুন গ্রাহক হিসেবে লেখা হয়েছে: %s"));
         m.put("livecall.mode", pair("Screening", "স্ক্রিনিং"));
         m.put("livecall.override_mode", pair("Change it by hand", "নিজে হাতে বদলান"));
         m.put("livecall.mode_changed", pair("Screening is now: %s", "স্ক্রিনিং এখন: %s"));

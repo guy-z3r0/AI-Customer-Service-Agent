@@ -86,6 +86,7 @@ public class PromptBuilder {
         }
         prompt.append('\n').append(languageDirective(session.language())).append("\n\n");
         prompt.append(Prompts.NUISANCE.formatted(business.getName())).append("\n\n");
+        prompt.append(Prompts.ASKING_FOR_A_PERSON).append("\n\n");
         prompt.append(Prompts.SITUATION).append('\n')
                 .append(modes.instructionsFor(session.mode())).append('\n')
                 .append(Prompts.EXCHANGES_SO_FAR.formatted(session.turnsSoFar())).append("\n\n");

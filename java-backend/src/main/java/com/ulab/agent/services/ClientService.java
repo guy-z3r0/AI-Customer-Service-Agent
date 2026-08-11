@@ -25,9 +25,13 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * The one class that knows how to open the box.
@@ -213,6 +217,34 @@ public class ClientService {
 
     private static boolean isMatchable(String phone) {
         return phone != null && digitsOf(phone).length() >= MATCHABLE_DIGITS;
+    }
+
+    /**
+     * Whether the name a caller gave is the name on the record.
+     *
+     * A number alone used to be enough to be treated as a customer, and it is
+     * not: numbers get reassigned, families share a handset, and a wrong digit
+     * read out over a bad line lands on somebody else's record. The name is the
+     * second thing, and asking for it costs one sentence.
+     *
+     * It is forgiving on purpose, because a caller says "Sadman" for a record
+     * reading "Sadman Sakib" and neither of them is wrong. Every word of the
+     * shorter has to appear in the longer, so a part of the name matches the
+     * whole of it and a different name does not match at all.
+     */
+    public static boolean sameName(String stored, String given) {
+        Set<String> onRecord = wordsOf(stored);
+        Set<String> offered = wordsOf(given);
+        if (onRecord.isEmpty() || offered.isEmpty()) return false;
+
+        return onRecord.containsAll(offered) || offered.containsAll(onRecord);
+    }
+
+    private static Set<String> wordsOf(String name) {
+        if (name == null) return Set.of();
+        return Arrays.stream(name.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}]+"))
+                .filter(word -> !word.isBlank())
+                .collect(Collectors.toSet());
     }
 
     // --------------------------------------------------------------- writes --

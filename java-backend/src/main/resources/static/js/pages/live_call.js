@@ -15,18 +15,10 @@
 import { api } from '../api.js';
 import { AgentPlayer } from '../audio/player.js';
 import { MicStream } from '../audio/mic_stream.js';
-import { button, dropdown, element, keyValueRow, tagBadge } from '../components.js';
+import { button, element } from '../components.js';
 import { TwilioMode } from '../twilio_mode.js';
 import { Transcript } from './live_transcript.js';
-import { formatElapsed, formatMedian } from './call_stats.js';
-
-const MODE_HUES = {
-    NEW_CUSTOMER: 'azure',
-    EXISTING_CUSTOMER: 'jade',
-    WRONG_NUMBER: 'rose',
-    COMPLEX_REQUEST: 'gold'
-};
-const MODES = ['NEW_CUSTOMER', 'EXISTING_CUSTOMER', 'WRONG_NUMBER', 'COMPLEX_REQUEST'];
+import { MODES, MODE_HUES, drawFacts, languageLabel, modeLabel } from './live_facts.js';
 
 /** Which Lang line explains a failure the Twilio SDK reported. */
 const TWILIO_TROUBLE = {
@@ -119,22 +111,7 @@ class LiveCall {
     }
 
     refreshFacts() {
-        const business = this.ctx.activeBusiness;
-        const grid = this.nodes.facts;
-        grid.replaceChildren();
-        keyValueRow(grid, this.t['livecall.state'], this.t[`livecall.state_${this.state}`]);
-        keyValueRow(grid, this.t['livecall.business'], business ? business.name : '—');
-        keyValueRow(grid, this.t['livecall.model'], this.modelFact());
-        keyValueRow(grid, this.t['livecall.language'], this.languageLabel(this.language));
-        keyValueRow(grid, this.t['livecall.caller'], this.caller || this.t['livecall.caller_unknown']);
-        keyValueRow(grid, this.t['livecall.dial_as'], this.clientChooser());
-        keyValueRow(grid, this.t['livecall.mode'], this.modeBadge());
-        keyValueRow(grid, this.t['livecall.override_mode'], this.modeChooser());
-        keyValueRow(grid, this.t['livecall.call_id'], this.callId || '—');
-        keyValueRow(grid, this.t['livecall.duration'],
-            formatElapsed(this.startedAt, this.endedAt));
-        keyValueRow(grid, this.t['livecall.turns'], String(this.turns));
-        keyValueRow(grid, this.t['livecall.median_latency'], formatMedian(this.latencies));
+        drawFacts(this);
     }
 
     /**
@@ -163,50 +140,6 @@ class LiveCall {
             // Not being able to list customers is no reason to block a call.
             this.clients = [];
         }
-    }
-
-    /**
-     * Who to place the call as. Picking a customer is the difference between an
-     * agent that has to ask who you are and one that greets you by name.
-     */
-    clientChooser() {
-        const options = [{ value: '', label: this.t['livecall.dial_as_stranger'] }];
-        this.clients.forEach((client) =>
-            options.push({ value: client.clientCode, label: `${client.clientCode} — ${client.name}` }));
-
-        const chooser = dropdown(options, this.dialAs, (code) => { this.dialAs = code; });
-        chooser.disabled = this.isLive() || this.clients.length === 0;
-        return chooser;
-    }
-
-    modeBadge() {
-        return tagBadge(this.modeLabel(this.mode), MODE_HUES[this.mode] || 'azure');
-    }
-
-    /** The operator overruling the agent. The server still refuses illegal moves. */
-    modeChooser() {
-        const chooser = dropdown(
-            MODES.map((mode) => ({ value: mode, label: this.modeLabel(mode) })),
-            this.mode,
-            (mode) => this.changeMode(mode));
-        chooser.disabled = !this.isLive();
-        return chooser;
-    }
-
-    modeLabel(mode) {
-        return this.t[`mode.${String(mode).toLowerCase()}`] || mode;
-    }
-
-    languageLabel(language) {
-        return this.t[`language.${String(language).toLowerCase()}`] || language;
-    }
-
-    /** Which model would answer, and whether it has a key to answer with. */
-    modelFact() {
-        const health = this.ctx.health;
-        if (!health) return '—';
-        const state = health.llmKeyReady ? this.t['status.ready'] : this.t['status.needs_key'];
-        return `${health.llmProvider} — ${state}`;
     }
 
     isLive() {
@@ -392,19 +325,11 @@ class LiveCall {
         }
     }
 
+    /** The operator put the phone down, or something here gave up. */
     async hangUp(reason) {
         const wasLive = this.state === 'listening' || this.state === 'speaking'
             || this.state === 'connecting';
-        if (this.socket) {
-            if (this.socket.readyState === WebSocket.OPEN) {
-                this.socket.send(JSON.stringify({ type: 'end', reason }));
-            }
-            this.socket.close();
-            this.socket = null;
-        }
-        if (this.mic) { this.mic.stop(); this.mic = null; }
-        if (this.player) { this.player.stop(); this.player = null; }
-        if (this.twilio) { this.twilio.hangUp(); this.twilio = null; }
+        this.releaseCall(reason);
 
         if (wasLive && this.callId) {
             try {
@@ -415,8 +340,50 @@ class LiveCall {
                 console.warn('could not report the call end', error);
             }
         }
+        this.finish();
+    }
+
+    /**
+     * The agent hung up, and the server is telling us after the fact.
+     *
+     * This used to only change the words in the State row. Everything else went
+     * on running: the clock counted past a call that had ended — which is what
+     * you see if you look away and back — and, worse, the microphone was never
+     * released, so the browser held it open after the call was over. The only
+     * part of an ordinary hangup that is skipped here is telling the server,
+     * because the server is where this came from.
+     */
+    endedByAgent() {
+        if (this.state === 'ended' || this.state === 'idle') return;
+        this.releaseCall(null);
+        this.finish();
+    }
+
+    /**
+     * Lets go of everything one call holds.
+     *
+     * @param reason sent up the voice socket on the way out; null when the far
+     *               end is the one closing it and there is nobody left to tell
+     */
+    releaseCall(reason) {
+        if (this.socket) {
+            if (reason !== null && this.socket.readyState === WebSocket.OPEN) {
+                this.socket.send(JSON.stringify({ type: 'end', reason }));
+            }
+            this.socket.close();
+            this.socket = null;
+        }
+        if (this.mic) { this.mic.stop(); this.mic = null; }
+        if (this.player) { this.player.stop(); this.player = null; }
+        if (this.twilio) { this.twilio.hangUp(); this.twilio = null; }
+    }
+
+    /** Stops the clock at the moment the call ended and paints that length. */
+    finish() {
         if (this.startedAt && !this.endedAt) this.endedAt = Date.now();
         this.stopClock();
+        // setState repaints the facts, so what is left on screen is the length
+        // the clock stopped at rather than the last tick before it.
         if (this.nodes.start) this.setState('ended');
     }
 
@@ -431,14 +398,14 @@ class LiveCall {
         else if (event.type === 'language_change') this.onLanguageChange(event);
         else if (event.type === 'client_identified') this.onClientIdentified(event);
         else if (event.type === 'notice') this.ctx.toast(this.t[event.key] || event.key, 'warn');
-        else if (event.type === 'call_ended') this.setState('ended');
+        else if (event.type === 'call_ended') this.endedByAgent();
     }
 
     onModeChange(event) {
         this.mode = event.toMode;
         // The opening classification is not a change; it is already in the facts.
         if (event.fromMode) {
-            this.transcript.addNote(this.t['livecall.mode_changed'].replace('%s', this.modeLabel(event.toMode)),
+            this.transcript.addNote(this.t['livecall.mode_changed'].replace('%s', modeLabel(this, event.toMode)),
                 event.reason, MODE_HUES[event.toMode]);
         }
         this.refreshFacts();
@@ -447,15 +414,22 @@ class LiveCall {
     onLanguageChange(event) {
         this.language = event.language;
         this.transcript.addNote(this.t['livecall.language_changed']
-            .replace('%s', this.languageLabel(event.language)), null, 'violet');
+            .replace('%s', languageLabel(this, event.language)), null, 'violet');
         this.refreshFacts();
     }
 
-    /** The agent worked out who is calling, or wrote a new record for them. */
+    /**
+     * The agent worked out who is calling, or wrote a new record for them.
+     *
+     * The note says which. Both used to read "Recognised: %s", so a caller who
+     * had just given their name for the first time appeared to have been
+     * matched to a record — which is a claim about a customer the app did not
+     * have, and there may well be another Sadman on the books.
+     */
     onClientIdentified(event) {
         this.caller = event.name;
-        this.transcript.addNote(this.t['livecall.caller_found'].replace('%s', event.name),
-            null, 'jade');
+        const key = event.recognised ? 'livecall.caller_found' : 'livecall.caller_written_down';
+        this.transcript.addNote(this.t[key].replace('%s', event.name), null, 'jade');
         this.refreshFacts();
     }
 

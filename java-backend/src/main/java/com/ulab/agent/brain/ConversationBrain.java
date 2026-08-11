@@ -359,7 +359,28 @@ public class ConversationBrain {
 
         session.setBusy(false);
         session.touch();
+        endIfThatWasTheGoodbye(session, whole);
         interventions.hangUpIfAsked(session);
+    }
+
+    /**
+     * Puts the phone down when the model said goodbye and forgot to.
+     *
+     * `end_call` exists and the standing orders point at it, but a model that
+     * has just written a farewell is exactly the model that stops reaching for
+     * tools — so a caller was left on a line the agent thought it had finished
+     * with, asking whether anyone was there. What it said is the more reliable
+     * signal than what it asked for, and {@link FarewellSense} reads it.
+     *
+     * No farewell text goes with this: the goodbye has already been spoken this
+     * turn, and adding Lang's would say it twice.
+     */
+    private void endIfThatWasTheGoodbye(CallSession session, String whole) {
+        if (session.isEnding() || !FarewellSense.endsTheCall(whole)) return;
+
+        log.info("[{}] the agent said goodbye without asking to hang up; ending the call",
+                session.callId());
+        session.requestHangup("agent_said_goodbye", "");
     }
 
     private void persistAgentLine(CallSession session, int turn, String whole,

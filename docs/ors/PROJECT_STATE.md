@@ -85,6 +85,39 @@ need a credential, a microphone or Docker, not more code.
   server were exercised against a running backend with a stand-in on 8090; a real Twilio call
   still has not been placed.
 
+## Since then — four more from one live call
+All four came out of a single four-minute call to Bengal Power System, transcript kept.
+Test script: `docs/ors/logs/live_call_fixes_test.md`.
+
+- **The call length went on counting after the agent had hung up.** Two paths end a call and
+  only one of them finished the page: pressing **End call** stopped the clock, while the agent
+  ending it left the page redrawing a timer against a call that was over. **And the microphone
+  was never released on that path either** — the browser held it open after the call, which
+  is the more serious half of the same bug and was not visible on screen at all. Both paths now
+  go through one teardown.
+- **The agent said goodbye and stayed on the line.** It wrote "thank you for contacting us,
+  and have a good day" and did not call `end_call`, so the caller was left listening to
+  nothing and had to ask "are you still there?" — twice. A model that has just written a
+  farewell is exactly the model that stops reaching for tools, so what it *said* is now read:
+  `brain/FarewellSense` ends the call on a reply that says goodbye and asks nothing. Both
+  halves are needed, because the standing orders already say every other reply ends with a
+  question — so a reply that merely forgot its question mark is not hung up on.
+- **"I want to talk with your manager" was escalated on that sentence alone.** The colleague
+  was handed a call whose entire content was the request itself, and nobody ever asked what it
+  was about — half of those callers want something the agent could have answered outright.
+  `escalate_to_human` now refuses an escalation that cannot say what the matter is, and the
+  prompt says to ask once and try to answer it first. Deliberately not a second hoop for a
+  caller who has already explained themselves: a complaint described on the first turn is
+  escalated on the first turn.
+- **"Recognised: Sadman" was neither recognition nor safe.** Two separate faults wearing one
+  badge. The panel said "Recognised" over a record the call had just written from what the
+  caller said their name was — it now says **Written down as a new customer**. And identity
+  rested on the number alone, which is not identity: handsets are shared, numbers are
+  reassigned, and one wrong digit over a bad line lands on somebody else's record, whose name
+  the caller would then be greeted by. `lookup_client` now needs the name as well as the
+  number, part of a name matching the whole of it, and `create_client` refuses a number
+  already on the books rather than giving one person two histories.
+
 ## Since then — nine more faults from live calls, all fixed
 Seven of the nine turned out to be one question asked in different places: **who has the
 floor, and how does anything else know?** See `architecture.md`, "What the turn-taking pass
@@ -141,13 +174,13 @@ its place — it speaks with voices `pyttsx3` refuses outright, verified against
 
 ## In progress
 Nothing. Waiting for Nanjiba to run `phase_07_test.md`, `turn_taking_test.md`,
-`one_tunnel_test.md` and `business_transfer_test.md`, and approve.
+`one_tunnel_test.md`, `business_transfer_test.md` and `live_call_fixes_test.md`, and approve.
 
 ## Blocked
 Nothing blocked.
 
 ## Next action
-**Approval gate.** Four scripts now.
+**Approval gate.** Five scripts now.
 
 1. `docs/ors/logs/turn_taking_test.md`, which covers the nine faults above. Steps 5 (a reply
    that is not cut off), 7 (an agent that does not talk over you) and 9 (a call that ends
@@ -155,7 +188,7 @@ Nothing blocked.
    to `secrets/gcp-credentials.json` before section E** — that one rename is what turns Bangla
    on.
 2. `docs/ors/logs/phase_07_test.md`, steps 1–15, unchanged except that step 1 now expects
-   165 Java tests and 51 Python. Steps 4 (a second business answering as itself), 7 (a
+   184 Java tests and 51 Python. Steps 4 (a second business answering as itself), 7 (a
    stranger no longer mistaken for a customer) and 11 (everything behaving with no Twilio
    credentials) decide that one. **Steps 9–10 now need only one ngrok tunnel**, pointed at
    8080, with that same host in both Public media URL and the TwiML App's request URL.
@@ -166,6 +199,10 @@ Nothing blocked.
 4. `docs/ors/logs/business_transfer_test.md`, new: a business downloaded as a file and put
    back. Steps 3 (a file that goes back in unedited) and 5 (a replace run twice that does not
    double anything) decide it. Section E is the Bangla voice list, which needs the Google key.
+5. `docs/ors/logs/live_call_fixes_test.md`, new: the four faults from the Bengal Power System
+   call. Steps 3 (a clock that stops), 5 (an agent that hangs up when it says goodbye) and 7
+   (a person fetched only once the agent knows what for) decide it. Step 4 is worth doing
+   even though it looks trivial — it is the microphone, and it was the one nobody could see.
 
 After that the project is built, and what is left is the definition-of-done sitting:
 
@@ -206,11 +243,13 @@ After that the project is built, and what is left is the definition-of-done sitt
   apply, and both run as uid 10001 rather than root.
 - **The test suite had never actually run on this machine.** Mockito's Byte Buddy did not
   understand Java 25's class files, so the fourteen login tests and both other security suites
-  errored before executing. `byte-buddy.version` is pinned to 1.18.0. **165 Java tests and 51
+  errored before executing. `byte-buddy.version` is pinned to 1.18.0. **184 Java tests and 51
   Python now pass**, up from 119 and 32 — the turn-taking pass added `CallEndsItselfTest`,
   `InactivityWatchdogTest`, `LanguageSenseTest`, `SlangGuardTest`,
-  `test_talking_over_each_other.py` and `test_voice_choices.py`, and the one-tunnel fix added
-  `TwilioRelayTest` plus a case in `ApiRequiresLoginTest`.
+  `test_talking_over_each_other.py` and `test_voice_choices.py`, the one-tunnel fix added
+  `TwilioRelayTest` plus a case in `ApiRequiresLoginTest`, the setup-file pass added
+  `BusinessTransferTest`, and the live-call pass added `FarewellSenseTest` plus cases in
+  `ToolExecutorTest`, `ClientMatchingTest` and `CallEndsItselfTest`.
 - `spring.jpa.hibernate.ddl-auto` is now `validate` (WARN-002). Flyway still owns the schema;
   Hibernate checks it at boot and refuses to start if an entity has drifted from a migration.
 - **Running two backends at once still breaks the database, but for one reason now instead of

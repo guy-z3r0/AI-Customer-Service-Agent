@@ -157,6 +157,8 @@ public final class TestCalls {
         public final List<ModeTransition> modeChanges = new ArrayList<>();
         public final List<Language> languageChanges = new ArrayList<>();
         public final List<String> identified = new ArrayList<>();
+        /** The names the panel was told were matched, not the ones just written down. */
+        public final List<String> recognised = new ArrayList<>();
         public final List<String> notices = new ArrayList<>();
         public final List<CallDtos.LineToStore> lines = new ArrayList<>();
 
@@ -181,8 +183,9 @@ public final class TestCalls {
         }
 
         @Override
-        public void recordClient(UUID callId, UUID clientId, String name) {
+        public void recordClient(UUID callId, UUID clientId, String name, boolean wasRecognised) {
             identified.add(name);
+            if (wasRecognised) recognised.add(name);
         }
 
         @Override

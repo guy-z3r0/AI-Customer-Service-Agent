@@ -151,6 +151,49 @@ class ToolExecutorTest {
     }
 
     @Test
+    void askingForAManagerIsNotOnItsOwnAReasonToHandTheCallOver() {
+        // From a real call: "I want to talk with your manager" was the whole of
+        // what the caller had said, and it was escalated on that sentence — so a
+        // colleague was handed a call with nothing in it to prepare for, and
+        // whatever the caller actually wanted was never asked about.
+        TestCalls.Wiring wiring = TestCalls.wire(CallMode.NEW_CUSTOMER, Language.EN);
+
+        String result = wiring.executor().run(wiring.session(), ToolRegistry.ESCALATE_TO_HUMAN,
+                "{\"reason\":\"caller asked for a person\"}");
+
+        assertTrue(result.contains("\"ok\":false"));
+        assertEquals(CallMode.NEW_CUSTOMER, wiring.session().mode(),
+                "the call has not been handed over, so nothing may have been promised");
+        assertTrue(wiring.log().modeChanges.isEmpty());
+    }
+
+    @Test
+    void aDetailFieldSayingNothingIsTheSameAsNoDetailAtAll() {
+        TestCalls.Wiring wiring = TestCalls.wire(CallMode.NEW_CUSTOMER, Language.EN);
+
+        assertTrue(wiring.executor().run(wiring.session(), ToolRegistry.ESCALATE_TO_HUMAN,
+                "{\"reason\":\"wants a person\",\"details\":\"manager\"}")
+                .contains("\"ok\":false"));
+        assertEquals(CallMode.NEW_CUSTOMER, wiring.session().mode());
+    }
+
+    @Test
+    void onceTheAgentKnowsWhatTheMatterIsItHandsItOverAtOnce() {
+        // The rule is about knowing what to hand over, not about making the
+        // caller ask twice: a complaint explained on the first turn is escalated
+        // on the first turn.
+        TestCalls.Wiring wiring = TestCalls.wire(CallMode.NEW_CUSTOMER, Language.EN);
+
+        String result = wiring.executor().run(wiring.session(), ToolRegistry.ESCALATE_TO_HUMAN,
+                "{\"reason\":\"a complaint about a late delivery\","
+                        + "\"details\":\"parcel booked Tuesday has not arrived and the "
+                        + "compensation offered was refused\"}");
+
+        assertTrue(result.contains("\"ok\":true"));
+        assertEquals(CallMode.COMPLEX_REQUEST, wiring.session().mode());
+    }
+
+    @Test
     void handingOverTwiceIsNotARefusal() {
         TestCalls.Wiring wiring = TestCalls.wire(CallMode.COMPLEX_REQUEST, Language.EN);
 
@@ -171,7 +214,8 @@ class ToolExecutorTest {
                 List.of("March: a repair, resolved."));
 
         String result = wiring.executor().run(wiring.session(), ToolRegistry.LOOKUP_CLIENT,
-                "{\"clientCode\":\"c001\",\"phoneLastFour\":\"1111\"}");
+                "{\"name\":\"Example Customer One\",\"clientCode\":\"c001\","
+                        + "\"phoneLastFour\":\"1111\"}");
 
         assertTrue(result.contains("\"ok\":true"));
         assertFalse(result.contains("Example Customer One"),
@@ -189,7 +233,7 @@ class ToolExecutorTest {
         wiring.customers().add("C001", "Example Customer One", "+8801711111111", List.of());
 
         String result = wiring.executor().run(wiring.session(), ToolRegistry.LOOKUP_CLIENT,
-                "{\"clientCode\":\"C001\"}");
+                "{\"name\":\"Example Customer One\",\"clientCode\":\"C001\"}");
 
         assertTrue(result.contains("\"ok\":false"));
         assertFalse(result.contains("Example Customer One"));
@@ -203,7 +247,8 @@ class ToolExecutorTest {
         wiring.customers().add("C001", "Example Customer One", "+8801711111111", List.of());
 
         assertTrue(wiring.executor().run(wiring.session(), ToolRegistry.LOOKUP_CLIENT,
-                "{\"clientCode\":\"C001\",\"phoneLastFour\":\"9999\"}").contains("\"ok\":false"));
+                "{\"name\":\"Example Customer One\",\"clientCode\":\"C001\","
+                        + "\"phoneLastFour\":\"9999\"}").contains("\"ok\":false"));
         assertNull(wiring.session().client());
     }
 
@@ -214,12 +259,14 @@ class ToolExecutorTest {
 
         for (int guess = 1; guess <= 3; guess++) {
             wiring.executor().run(wiring.session(), ToolRegistry.LOOKUP_CLIENT,
-                    "{\"clientCode\":\"C00" + guess + "\",\"phoneLastFour\":\"0000\"}");
+                    "{\"name\":\"Example Customer One\",\"clientCode\":\"C00" + guess
+                            + "\",\"phoneLastFour\":\"0000\"}");
         }
 
         // Even the right answer is refused now — the line is done answering.
         String afterwards = wiring.executor().run(wiring.session(), ToolRegistry.LOOKUP_CLIENT,
-                "{\"clientCode\":\"C001\",\"phoneLastFour\":\"1111\"}");
+                "{\"name\":\"Example Customer One\",\"clientCode\":\"C001\","
+                        + "\"phoneLastFour\":\"1111\"}");
         assertTrue(afterwards.contains("\"ok\":false"));
         assertNull(wiring.session().client());
     }
@@ -230,10 +277,77 @@ class ToolExecutorTest {
         wiring.customers().add("C001", "Example Customer One", "+8801711111111", List.of());
 
         String result = wiring.executor().run(wiring.session(), ToolRegistry.LOOKUP_CLIENT,
-                "{\"phone\":\"01711111111\"}");
+                "{\"name\":\"Example Customer One\",\"phone\":\"01711111111\"}");
 
         assertTrue(result.contains("\"ok\":true"), "the same number written another way");
         assertEquals("C001", wiring.session().client().clientCode());
+    }
+
+    @Test
+    void aNumberWithoutANameIdentifiesNobody() {
+        // A number was proof on its own, and it is not: handsets are shared,
+        // numbers get reassigned, and a wrong digit over a bad line lands on
+        // somebody else's record — who the caller would then be greeted as.
+        TestCalls.Wiring wiring = TestCalls.wire(CallMode.NEW_CUSTOMER, Language.EN);
+        wiring.customers().add("C001", "Example Customer One", "+8801711111111", List.of());
+
+        assertTrue(wiring.executor().run(wiring.session(), ToolRegistry.LOOKUP_CLIENT,
+                "{\"phone\":\"01711111111\"}").contains("\"ok\":false"));
+        assertNull(wiring.session().client());
+        assertEquals(CallMode.NEW_CUSTOMER, wiring.session().mode());
+    }
+
+    @Test
+    void theRightNumberWithSomebodyElsesNameIdentifiesNobody() {
+        TestCalls.Wiring wiring = TestCalls.wire(CallMode.NEW_CUSTOMER, Language.EN);
+        wiring.customers().add("C001", "Example Customer One", "+8801711111111", List.of());
+
+        String result = wiring.executor().run(wiring.session(), ToolRegistry.LOOKUP_CLIENT,
+                "{\"name\":\"Somebody Else\",\"phone\":\"01711111111\"}");
+
+        assertTrue(result.contains("\"ok\":false"));
+        assertFalse(result.contains("Example Customer One"),
+                "a near miss must not tell a guesser whose number they found");
+        assertNull(wiring.session().client());
+    }
+
+    @Test
+    void thePartOfANameACallerActuallySaysIsEnough() {
+        // Nobody reads their full name off their own record. "Sadman" has to
+        // match "Sadman Sakib", or the rule is one no real caller can satisfy.
+        TestCalls.Wiring wiring = TestCalls.wire(CallMode.NEW_CUSTOMER, Language.EN);
+        wiring.customers().add("C001", "Sadman Sakib", "+8801711111111", List.of());
+
+        assertTrue(wiring.executor().run(wiring.session(), ToolRegistry.LOOKUP_CLIENT,
+                "{\"name\":\"Sadman\",\"phone\":\"01711111111\"}").contains("\"ok\":true"));
+        assertEquals("C001", wiring.session().client().clientCode());
+    }
+
+    @Test
+    void aRecordWrittenDuringTheCallIsNotReportedAsRecognised() {
+        // The panel used to say "Recognised: Sadman" over a record created ten
+        // seconds earlier from what the caller had just said their name was.
+        TestCalls.Wiring wiring = TestCalls.wire(CallMode.NEW_CUSTOMER, Language.EN);
+
+        wiring.executor().run(wiring.session(), ToolRegistry.CREATE_CLIENT,
+                "{\"name\":\"Sadman\",\"phone\":\"01700000000\",\"request\":\"asked about prices\"}");
+
+        assertEquals(List.of("Sadman"), wiring.log().identified);
+        assertTrue(wiring.log().recognised.isEmpty(),
+                "nothing was recognised; a name was written down");
+    }
+
+    @Test
+    void aNumberAlreadyOnTheBooksIsNotWrittenDownASecondTime() {
+        TestCalls.Wiring wiring = TestCalls.wire(CallMode.NEW_CUSTOMER, Language.EN);
+        wiring.customers().add("C001", "Sadman Sakib", "+8801711111111", List.of());
+
+        String result = wiring.executor().run(wiring.session(), ToolRegistry.CREATE_CLIENT,
+                "{\"name\":\"Sadman\",\"phone\":\"01711111111\",\"request\":\"a quote\"}");
+
+        assertTrue(result.contains("\"ok\":false"));
+        assertEquals(1, wiring.customers().records.size(),
+                "two records for one person is two histories and one wrong callback");
     }
 
     @Test
@@ -241,7 +355,7 @@ class ToolExecutorTest {
         TestCalls.Wiring wiring = TestCalls.wire(CallMode.NEW_CUSTOMER, Language.EN);
 
         assertTrue(wiring.executor().run(wiring.session(), ToolRegistry.LOOKUP_CLIENT,
-                "{\"clientCode\":\"C999\"}").contains("\"ok\":false"));
+                "{\"name\":\"Nobody At All\",\"clientCode\":\"C999\"}").contains("\"ok\":false"));
         assertNull(wiring.session().client());
         assertEquals(CallMode.NEW_CUSTOMER, wiring.session().mode());
     }
@@ -287,7 +401,8 @@ class ToolExecutorTest {
         wiring.customers().add("C001", "Example Customer One", "+8801711111111",
                 List.of("March: a repair, resolved."));
         wiring.executor().run(wiring.session(), ToolRegistry.LOOKUP_CLIENT,
-                "{\"clientCode\":\"C001\",\"phoneLastFour\":\"1111\"}");
+                "{\"name\":\"Example Customer One\",\"clientCode\":\"C001\","
+                        + "\"phoneLastFour\":\"1111\"}");
 
         wiring.executor().run(wiring.session(), ToolRegistry.LOG_REQUEST,
                 "{\"summary\":\"August: asked about the warranty.\"}");

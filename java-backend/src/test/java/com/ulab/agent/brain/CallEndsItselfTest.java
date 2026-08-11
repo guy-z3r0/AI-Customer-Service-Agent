@@ -95,6 +95,48 @@ class CallEndsItselfTest {
                 "and the model has nothing useful to do with it");
     }
 
+    // ------------------------------------------- the goodbye it forgot to act on --
+
+    @Test
+    void anAgentThatSaysGoodbyeHangsUpEvenWhenItForgotToAskTo() {
+        // From a real call: the agent said its farewell, did not call end_call,
+        // and stayed on a line the caller thought was over — who then had to ask
+        // "are you still there?" twice before it would put the phone down.
+        Call call = new Call();
+
+        call.answered("Thank you for contacting Bengal Power System, and have a good day.");
+
+        assertTrue(call.session.isEnding());
+        List<Map<String, Object>> hangups = call.outbox.ofType("hangup");
+        assertEquals(1, hangups.size());
+        assertEquals("agent_said_goodbye", hangups.get(0).get("reason"));
+        assertEquals("", hangups.get(0).get("farewellText"),
+                "the goodbye has just been spoken; saying Lang's as well says it twice");
+    }
+
+    @Test
+    void anOrdinaryReplyLeavesTheCallWhereItIs() {
+        Call call = new Call();
+
+        call.answered("Same-day delivery inside Dhaka is 80 taka. Shall I book one for you?");
+
+        assertFalse(call.session.isEnding());
+        assertTrue(call.outbox.ofType("hangup").isEmpty());
+    }
+
+    @Test
+    void anAgentAlreadyHangingUpDoesNotEndTheCallTwice() {
+        Call call = new Call();
+        call.session.requestHangup("caller_said_goodbye", "Thank you for calling. Goodbye.");
+
+        call.answered("Thank you for calling. Goodbye.");
+
+        assertEquals(1, call.outbox.ofType("hangup").size());
+        assertEquals("caller_said_goodbye",
+                call.outbox.ofType("hangup").get(0).get("reason"),
+                "the reason the call was already ending for is the one that stands");
+    }
+
     /** One call, its brain, and everything either of them said. */
     private static final class Call {
 
@@ -125,6 +167,15 @@ class CallEndsItselfTest {
          */
         private void said(String text) {
             brain.onTranscriptFinal(id(), text, 0L);
+        }
+
+        /**
+         * A turn the model has finished writing, handed to the brain the way a
+         * real one arrives. No model is involved: what is being tested is what
+         * the brain does with the words, whoever wrote them.
+         */
+        private void answered(String reply) {
+            brain.finishTurn(session, 1, 0L, reply, reply, null);
         }
 
         private List<String> spoken() {

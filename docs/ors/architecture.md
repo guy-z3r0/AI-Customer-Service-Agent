@@ -508,6 +508,39 @@ Three rules set here:
 - **The model is asked, not relied on, for what can be measured.** Which language a caller is
   speaking is written in their words; the agent follows that whether or not the model notices.
 
+## What the live-call pass changed
+
+Four faults from one four-minute call, and two of them are the same question the turn-taking
+pass asked: **when is the call over, and who is the caller?** Both had been answered for one
+path each and left unanswered for the other.
+
+```
+  ends the call ─┬─ operator presses End call ─▶ clock stops, mic released ✓
+                 └─ the agent hangs up ────────▶ the words changed, nothing else did ✗
+                                                 → both go through one teardown now
+
+  who is calling ─┬─ the number matches ───────▶ "Recognised: Sadman" ✗  a number is not a person
+                  └─ a record just written ────▶ "Recognised: Sadman" ✗  nothing was recognised
+                                                 → name + number, and the note says which
+```
+
+| Layer | Added or changed |
+|---|---|
+| `brain/` | `FarewellSense` — whether a reply was the goodbye, read from the reply rather than from whether the model remembered to ask. `ConversationBrain.finishTurn` ends the call on one |
+| `brain/tools/` | `escalate_to_human` refuses an escalation that cannot say what the matter is; `lookup_client` requires the name beside the number; `create_client` refuses a number already on the books |
+| `services/` | `ClientService.sameName` — part of a name matching the whole of it; `CallLogService.recordClient` carries whether the caller was matched or written down |
+| `utils/` | `Prompts.ASKING_FOR_A_PERSON` — ask what it is about, try to answer it, then hand it over |
+| `static/js/` | `live_call.js` releases the call the same way whoever ended it; `live_facts.js` is the facts grid, split out at the 500-line cap |
+
+Two rules set here:
+
+- **What the model said is better evidence than what it asked for.** A model writing a
+  farewell is exactly the model that stops calling tools, so the goodbye is read out of the
+  words. The standing orders make that readable: every reply but the last ends with a question.
+- **Two facts that agree, or nobody.** A number identified a caller on its own, and numbers are
+  shared, reassigned and misheard. Names are not unique either — that is the point — so
+  identity needs both, and a record written during the call is not an identification at all.
+
 ## What the setup-file pass changed
 
 A business can be downloaded and uploaded. Nothing about a call changed; what changed is that

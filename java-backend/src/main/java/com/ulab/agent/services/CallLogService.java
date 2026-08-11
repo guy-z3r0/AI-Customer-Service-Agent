@@ -170,17 +170,24 @@ public class CallLogService {
     /**
      * Ties a call to the customer it turned out to be. The name travels with the
      * event so the panel can say who is on the phone without a second request.
+     *
+     * @param recognised whether the caller was matched to a record that already
+     *                   existed. The panel says which, because "Recognised:
+     *                   Sadman" over a record written moments ago during this
+     *                   same call reads as the app knowing who is on the phone
+     *                   when all it did was write down what it was told.
      */
     @Transactional
-    public void recordClient(UUID callId, UUID clientId, String name) {
+    public void recordClient(UUID callId, UUID clientId, String name, boolean recognised) {
         calls.findById(callId).ifPresent(call -> {
             call.setClientId(clientId);
             calls.save(call);
         });
 
-        log.info("Call {} is with client {}", callId, clientId);
+        log.info("Call {} is with client {} ({})", callId, clientId,
+                recognised ? "recognised" : "newly written down");
         liveEvents.broadcast("client_identified", event("callId", callId,
-                "clientId", clientId, "name", name));
+                "clientId", clientId, "name", name, "recognised", recognised));
     }
 
     @Transactional

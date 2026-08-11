@@ -90,13 +90,20 @@ public class ToolRegistry {
             {
               "name": "lookup_client",
               "description": "Check whether the caller is a customer on the records, before \
-            saying anything about an order or a job already in progress. Either give the full \
-            phone number they read out, or give their customer code together with the last \
-            four digits of the number we hold — a code on its own is not enough to identify \
-            anybody. This answers only yes or no; it never tells you their name.",
+            saying anything about an order or a job already in progress. It always needs their \
+            name, and one of two other things: the full phone number they read out, or their \
+            customer code together with the last four digits of the number we hold. Neither a \
+            name nor a code identifies anybody on its own — two callers share a name, and \
+            codes run C001, C002, C003. This answers only yes or no; it never tells you their \
+            name.",
               "parameters": {
                 "type": "object",
                 "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "The name the caller gave. Part of a name is enough — \
+            \\"Sadman\\" matches a record reading \\"Sadman Sakib\\"."
+                  },
                   "clientCode": {
                     "type": "string",
                     "description": "The code the caller gave, such as C001. Must be sent with \
@@ -109,10 +116,10 @@ public class ToolRegistry {
                   },
                   "phone": {
                     "type": "string",
-                    "description": "The caller's full phone number, in any format. Enough on \
-            its own."
+                    "description": "The caller's full phone number, in any format"
                   }
-                }
+                },
+                "required": ["name"]
               }
             }""",
             """
@@ -154,9 +161,12 @@ public class ToolRegistry {
             {
               "name": "escalate_to_human",
               "description": "Hand this call to a member of staff, who is emailed a summary of \
-            it when the call ends. Use it for a refund or discount you cannot approve, a \
-            complaint, a legal question, or a caller who asks for a person. Stay on the line \
-            afterwards and take down whatever that person will need.",
+            it when the call ends. Only once you know what the caller actually wants and have \
+            found you cannot settle it yourself: a refund or discount you cannot approve, a \
+            complaint, a legal question, or something the knowledge base does not cover. \
+            \"I want to speak to a manager\" is not on its own a reason to use this — ask what \
+            it is about first, and try to answer it. Stay on the line afterwards and take down \
+            whatever that person will need.",
               "parameters": {
                 "type": "object",
                 "properties": {
@@ -166,11 +176,12 @@ public class ToolRegistry {
                   },
                   "details": {
                     "type": "string",
-                    "description": "Anything the caller gave that the colleague will need, such \
-            as an order number or when to call back"
+                    "description": "What the caller said the matter is, in their own terms, \
+            with anything the colleague will need such as an order number or when to call \
+            back. Write what they told you, not that they asked for a person."
                   }
                 },
-                "required": ["reason"]
+                "required": ["reason", "details"]
               }
             }""");
 
